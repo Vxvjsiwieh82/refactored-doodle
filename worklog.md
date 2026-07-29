@@ -111,3 +111,51 @@ Unresolved / próximos passos:
 - O cron job webDevReview continua a cada 15 min — próximas rodadas podem: conectar Browserless real, replay de EventRow persistido (history sheet), UI de "Plugins" e "Biblioteca", mais variações de BrowserMock, comand palette (Cmd+K com search), tema light toggle, tradução EN.
 - Sandbox Docker / OAuth / Stripe continuam como stubs (requerem infra/creds externas).
 - LLM está como GLM-5.2 fixo (demoMode) — para multi-modelo real, preencher .env com chaves OpenRouter/provedores.
+
+---
+Task ID: 3
+Agent: Z.ai Code (webDevReview cron, round 2)
+Task: QA via agent-browser + adicionar Command Palette, Library/History com replay, Plugins marketplace, theme toggle, message actions
+
+Work Log:
+- QA via agent-browser identificou 3 issues: (1) "Plugins" e "Biblioteca" da sidebar sem ação; (2) sem command palette (Cmd+K só criava nova task); (3) sem theme toggle (dark only); (4) sem message actions (copy/regenerate).
+- **Command Palette** (⌘K):
+  * `command-palette.tsx` — dialog com search input, agrupamento por categoria (Actions/Navigation/Modes/Settings), fuzzy filter por label/hint/keywords, navegação ↑↓ + Enter, scrollIntoView, shortcuts badges (<kbd>), footer com hints.
+  * 13 comandos: nova conversa, home, docs, status, integrações, conta, agendado, biblioteca, plugins, 3 modos, atalhos, toggle tema.
+  * ⌘K agora abre o palette (antes era new task). ⌘N = new task (alternativo). Botão "⌘K" no header (lg+) com ícone Search.
+  * Verificado: busca "biblio" → filtra para Biblioteca, Enter abre sheet.
+- **Library / Task History com replay** (item "Biblioteca" da sidebar):
+  * Prisma já tinha Task + EventRow. Novo `/api/tasks/history` (GET lista com _count events/artifacts, GET ?id= retorna task completa com events parseados de JSON payload + messages + artifacts).
+  * `/api/tasks` PATCH adicionado para update de status/summary/finishedAt.
+  * `use-agent-runner.ts` atualizado: task path agora POST /api/tasks (persiste server-side, retorna taskId real) + PATCH ao completar com summary do LLM. Tasks executadas agora aparecem no History.
+  * `LibrarySheet` component: lista de tasks com search, status badges coloridos, meta (data, duração, eventos, artefatos, modo). Click → abre replay view com: stats (passos/eventos/créditos), event display formatado por tipo (TERMINAL/BROWSER/FILE/THINKING/STEP_COMPLETED), scrubber com play/pause/rewind/forward + auto-advance (600ms/event), lista de artefatos.
+  * Fix: fetchedRef resetado on close para refetch ao reabrir; auto-advance via setTimeout evita setState síncrono no effect.
+  * Verificado: task "Crie uma landing page" executada → persistiu (26 eventos, status completed, summary LLM) → Library mostra → replay abre com scrubber funcional.
+- **Plugins marketplace** (item "Plugins" da sidebar):
+  * `PluginsSheet` component: 12 plugins (Navegador Chromium, Terminal Bash, Editor Monaco, Exa AI, Google Drive, OneDrive, Figma, GitHub, Slack, Notion, Gmail, Calendar) com categoria, ícone emoji, descrição, toggle on/off, badges Beta/Ativo.
+  * Filtro por categoria (Todos/Navegação/Execução/Pesquisa/etc).
+  * Contador "X de Y plugins ativos".
+  * Badge "3/12" no item da sidebar.
+  * Verificado: abre, mostra 12 plugins, 3 ativos, filtros funcionam.
+- **Theme toggle (dark/light)**:
+  * `ThemeProvider` refatorado: lazy initializer lê localStorage, effect aplica `.dark` OU `.light` class no <html>, persiste em localStorage.
+  * CSS: `.light` class com palette light completa (#fafafa bg, #0d0d0f text, #0891b2 brand). `:root:not(.dark)` não funcionava (Tailwind v4 stripped) → trocado para `.light` class.
+  * Botão Sun/Moon no header. Command palette tem "Alternar tema".
+  * Verificado: toggle → background muda de #0d0d0f para #fafafa, texto legível, VLM confirmou light theme correto.
+- **Message actions** (copy/regenerate/feedback):
+  * `MessageActions` component em messages.tsx: aparece on hover (opacity-0 → group-hover:opacity-100) em mensagens de assistant completas.
+  * 4 ações: Copiar (com feedback "Copiado"), Regenerar, ThumbsUp, ThumbsDown (com state toggle colorido).
+  * Verificado: DOM mostra botões Copiar/Regenerar/Boa resposta/Resposta ruim.
+- Lint limpo. Dev log sem erros runtime.
+
+Stage Summary:
+- **5 features novas**: Command Palette (⌘K), Library/History com replay completo, Plugins marketplace, theme toggle dark/light, message actions.
+- **2 APIs novas**: /api/tasks/history (GET lista + GET por id), /api/tasks PATCH.
+- **Persistência real**: tasks agora são salvas no DB ao executar (POST /api/tasks) e atualizadas ao completar (PATCH), com events + summary do LLM. History mostra tarefas reais com replay funcional.
+- Verificado end-to-end com agent-browser + VLM: palette search/filtro, library lista+replay+scrubber, plugins marketplace, theme toggle (light confirmado via VLM), message actions no DOM.
+- Stack: Next.js 16 (3000) + event-stream (3003/3004) + Prisma/SQLite + 9 APIs.
+
+Unresolved / próximos passos:
+- O cron job webDevReview continua a cada 15 min — próximas rodadas podem: conectar Browserless real, comand palette com search de tarefas do histórico, mais variações de BrowserMock, i18n (EN/PT), onboarding tour, página /blog e /changelog com content real, share dialog funcional, keyboard navigation dentro do computer panel, accessibility audit (aria-labels, focus traps).
+- Regenerar message action é stub (não re-executa o LLM) — pode ser wired ao /api/chat.
+- Sandbox Docker / OAuth / Stripe continuam como stubs.

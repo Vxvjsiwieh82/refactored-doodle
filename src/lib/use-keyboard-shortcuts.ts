@@ -30,11 +30,12 @@ export function useKeyboardShortcuts(opts: {
         target?.tagName === 'TEXTAREA' ||
         target?.isContentEditable;
 
-      // ⌘/Ctrl + K — new task (always, even when typing)
-      if (mod && e.key.toLowerCase() === 'k') {
+      // ⌘/Ctrl + K is handled by the CommandPalette in workspace.tsx (opens palette)
+      // ⌘/Ctrl + N — new task (alternative)
+      if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         onNewTask();
-        toast.success('Nova conversa', { description: '⌘K' });
+        toast.success('Nova conversa', { description: '⌘N' });
         return;
       }
 

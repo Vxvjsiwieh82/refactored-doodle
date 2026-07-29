@@ -128,6 +128,49 @@
   --danger: #ef4444;
 }
 
+/* Light theme — applied via .light class on <html> */
+.light {
+  --background: #fafafa;
+  --foreground: #0d0d0f;
+  --card: #ffffff;
+  --card-foreground: #0d0d0f;
+  --popover: #ffffff;
+  --popover-foreground: #0d0d0f;
+  --primary: #0891b2;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #0d0d0f;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #e4e4e7;
+  --accent-foreground: #0d0d0f;
+  --destructive: #dc2626;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #0891b2;
+  --brand: #0891b2;
+  --brand-foreground: #ffffff;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --sidebar: #f4f4f5;
+  --sidebar-foreground: #0d0d0f;
+  --sidebar-primary: #0891b2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e4e4e7;
+  --sidebar-accent-foreground: #0d0d0f;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #0891b2;
+  --bg-primary: #fafafa;
+  --bg-secondary: #f4f4f5;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e4e4e7;
+  --border-subtle: #e4e4e7;
+  --text-primary: #0d0d0f;
+  --text-secondary: #71717a;
+  --text-muted: #a1a1aa;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

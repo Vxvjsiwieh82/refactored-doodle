@@ -72,3 +72,20 @@ export async function GET() {
   });
   return NextResponse.json({ tasks });
 }
+
+// PATCH /api/tasks — update status/summary of a task (called when client finishes replay).
+export async function PATCH(req: Request) {
+  const user = await getCurrentUser();
+  const { id, status, summary } = await req.json().catch(() => ({} as any));
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const finished = status === 'completed' || status === 'failed';
+  const task = await db.task.updateMany({
+    where: { id, userId: user.id },
+    data: {
+      ...(status ? { status } : {}),
+      ...(summary ? { summary } : {}),
+      ...(finished ? { finishedAt: new Date() } : {}),
+    },
+  });
+  return NextResponse.json({ updated: task.count });
+}

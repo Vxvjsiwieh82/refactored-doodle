@@ -5,6 +5,8 @@ import {
   ShieldCheck, FileText, User, Activity, LogIn, Check, X, Zap, Coins,
   TrendingUp, Database, Globe, Bot, Crown, Settings, Bell, Monitor,
   Cpu, HardDrive, Wifi, Server, AlertCircle, CalendarClock, Plus, Trash2, Play, Pause,
+  Library as LibraryIcon, Clock, ChevronRight, Rewind, FastForward, Search,
+  Puzzle,
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
@@ -608,6 +610,344 @@ export function ScheduledSheet({ open, onOpenChange }: SheetProps) {
               </div>
             </div>
           ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/* ============== Library / Task History with replay ============== */
+interface HistoryTask {
+  id: string; goal: string; mode: string; model: string; status: string;
+  summary: string | null; stepsTotal: number; stepsDone: number; creditsUsed: number;
+  createdAt: string; finishedAt: string | null; eventCount: number; artifactCount: number;
+}
+
+export function LibrarySheet({ open, onOpenChange }: SheetProps) {
+  const [tasks, setTasks] = useState<HistoryTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [replayData, setReplayData] = useState<any>(null);
+  const [replayIdx, setReplayIdx] = useState(0);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const fetchedRef = useRef(false);
+
+  const load = () => {
+    fetch('/api/tasks/history').then((r) => r.json()).then((d) => {
+      setTasks(d.tasks ?? []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!open) {
+      fetchedRef.current = false;
+      return;
+    }
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+    load();
+  }, [open]);
+
+  // load a single task's full event stream for replay
+  const openReplay = async (id: string) => {
+    setSelectedId(id);
+    setReplayData(null);
+    const res = await fetch(`/api/tasks/history?id=${id}`);
+    const d = await res.json();
+    setReplayData(d.task);
+    setReplayIdx(0);
+    setReplayPlaying(false);
+  };
+
+  // auto-advance replay
+  useEffect(() => {
+    if (!replayPlaying || !replayData) return;
+    const total = replayData.events.length;
+    if (replayIdx >= total - 1) {
+      // schedule the pause on next tick to avoid synchronous setState in effect
+      const id = setTimeout(() => setReplayPlaying(false), 0);
+      return () => clearTimeout(id);
+    }
+    const t = setTimeout(() => setReplayIdx((i) => i + 1), 600);
+    return () => clearTimeout(t);
+  }, [replayPlaying, replayIdx, replayData]);
+
+  const filtered = tasks.filter((t) =>
+    !search.trim() || t.goal.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const fmtDate = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const fmtDur = (a: string, b: string | null) => {
+    if (!b) return '—';
+    const s = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 1000);
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`;
+  };
+
+  const statusColor: Record<string, string> = {
+    completed: 'border-success/40 text-success',
+    running: 'border-brand/40 text-brand',
+    failed: 'border-danger/40 text-danger',
+    queued: 'border-warning/40 text-warning',
+  };
+
+  // Replay view
+  if (selectedId && replayData) {
+    const ev = replayData.events[replayIdx];
+    const evs = replayData.events;
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full overflow-y-auto omni-scroll border-border bg-card sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <button onClick={() => { setSelectedId(null); setReplayData(null); }} className="text-muted-foreground hover:text-foreground">
+                <ChevronRight className="h-4 w-4 rotate-180" />
+              </button>
+              <Rewind className="h-4 w-4 text-brand" /> Replay de sessão
+            </SheetTitle>
+            <SheetDescription className="truncate">{replayData.goal}</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-3">
+            {/* meta */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg border border-border bg-background/40 p-2">
+                <div className="text-[10px] uppercase text-muted-foreground">Passos</div>
+                <div className="font-serif text-lg font-semibold">{replayData.stepsDone}/{replayData.stepsTotal}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/40 p-2">
+                <div className="text-[10px] uppercase text-muted-foreground">Eventos</div>
+                <div className="font-serif text-lg font-semibold">{evs.length}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/40 p-2">
+                <div className="text-[10px] uppercase text-muted-foreground">Créditos</div>
+                <div className="font-serif text-lg font-semibold text-warning">{replayData.creditsUsed}</div>
+              </div>
+            </div>
+
+            {/* current event */}
+            <div className="rounded-lg border border-border bg-[#0a0a0c] p-3 font-mono text-[11px]">
+              <div className="mb-1 flex items-center gap-2">
+                <Badge variant="outline" className="h-4 px-1 text-[9px] text-brand">{ev?.type}</Badge>
+                <span className="text-muted-foreground">{replayIdx + 1}/{evs.length}</span>
+              </div>
+              {ev?.type === 'TERMINAL_OUTPUT' && (
+                <div className="space-y-0.5">
+                  <div className="text-success">$ {ev.cmd}</div>
+                  {ev.stdout && <div className="whitespace-pre-wrap text-muted-foreground">{ev.stdout}</div>}
+                </div>
+              )}
+              {ev?.type === 'BROWSER_ACTION' && (
+                <div className="space-y-0.5">
+                  <div className="text-brand">→ {ev.action}{ev.url ? `: ${ev.url}` : ''}</div>
+                  {ev.detail && <div className="text-muted-foreground">{ev.detail}</div>}
+                </div>
+              )}
+              {ev?.type === 'FILE_CHANGED' && (
+                <div className="space-y-0.5">
+                  <div className="text-purple-400">✎ {ev.path}</div>
+                  {ev.diff && <pre className="whitespace-pre-wrap text-success">{ev.diff}</pre>}
+                </div>
+              )}
+              {ev?.type === 'AGENT_THINKING' && <div className="text-muted-foreground italic">{ev.text}</div>}
+              {ev?.type === 'STEP_COMPLETED' && <div className="text-success">✓ {ev.result}</div>}
+              {ev?.type === 'TASK_COMPLETED' && <div className="text-success">{ev.summary}</div>}
+              {(ev?.type === 'TASK_STARTED' || ev?.type === 'PLAN_CREATED' || ev?.type === 'STEP_STARTED') && (
+                <div className="text-muted-foreground">{JSON.stringify(ev).slice(0, 120)}</div>
+              )}
+            </div>
+
+            {/* scrubber */}
+            <div className="flex items-center gap-2">
+              <button onClick={() => setReplayIdx((i) => Math.max(0, i - 1))} className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-accent">
+                <Rewind className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => setReplayPlaying((p) => !p)} className="flex h-7 w-7 items-center justify-center rounded-md bg-brand text-brand-foreground">
+                {replayPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              </button>
+              <button onClick={() => setReplayIdx((i) => Math.min(evs.length - 1, i + 1))} className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-accent">
+                <FastForward className="h-3.5 w-3.5" />
+              </button>
+              <div className="group relative h-1.5 flex-1 rounded-full bg-accent">
+                <div className="absolute left-0 top-0 h-full rounded-full bg-brand transition-all" style={{ width: `${(replayIdx / Math.max(evs.length - 1, 1)) * 100}%` }} />
+                <input type="range" min={0} max={Math.max(evs.length - 1, 0)} value={replayIdx} onChange={(e) => { setReplayPlaying(false); setReplayIdx(Number(e.target.value)); }} className="absolute inset-0 w-full cursor-pointer opacity-0" />
+              </div>
+              <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{replayIdx + 1}/{evs.length}</span>
+            </div>
+
+            {/* artifacts */}
+            {replayData.artifacts?.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Artefatos ({replayData.artifacts.length})</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {replayData.artifacts.map((a: any) => (
+                    <Badge key={a.id} variant="outline" className="gap-1 border-border text-[10px]">
+                      <FileText className="h-2.5 w-2.5" /> {a.name} <span className="text-muted-foreground">{(a.sizeBytes / 1024).toFixed(0)}KB</span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto omni-scroll border-border bg-card sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <LibraryIcon className="h-4 w-4 text-brand" /> Biblioteca
+          </SheetTitle>
+          <SheetDescription>Histórico de tarefas — clique para replay com scrubber.</SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-2">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar tarefas…"
+              className="flex-1 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {loading && <div className="omni-shimmer h-16 rounded-lg" />}
+          {!loading && filtered.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center">
+              <LibraryIcon className="mx-auto h-8 w-8 text-muted-foreground/40" />
+              <p className="mt-2 text-sm text-muted-foreground">{tasks.length === 0 ? 'Nenhuma tarefa executada ainda.' : 'Nenhuma tarefa encontrada.'}</p>
+              <p className="text-[10px] text-muted-foreground/70">Execute uma tarefa no modo Agent para vê-la aqui.</p>
+            </div>
+          )}
+          {filtered.map((t) => (
+            <button
+              key={t.id} onClick={() => openReplay(t.id)}
+              className="group flex w-full items-start gap-3 rounded-lg border border-border bg-background/40 p-3 text-left transition-all hover:border-brand/40 hover:bg-accent/30"
+            >
+              <div className="flex-shrink-0">
+                {t.status === 'completed' ? (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/15 text-success"><Check className="h-4 w-4" /></div>
+                ) : t.status === 'running' ? (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-brand"><Play className="h-4 w-4" /></div>
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-warning/15 text-warning"><AlertCircle className="h-4 w-4" /></div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-xs font-medium">{t.goal}</span>
+                  <Badge variant="outline" className={cn('h-3.5 px-1 text-[9px]', statusColor[t.status] ?? '')}>{t.status}</Badge>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> {fmtDate(t.createdAt)}</span>
+                  <span>· {fmtDur(t.createdAt, t.finishedAt)}</span>
+                  <span>· {t.eventCount} eventos</span>
+                  {t.artifactCount > 0 && <span>· {t.artifactCount} artefatos</span>}
+                  <Badge variant="outline" className="h-3.5 px-1 text-[9px] uppercase">{t.mode === 'agent_max' ? 'MAX' : t.mode}</Badge>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </button>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/* ============== Plugins / Integrations marketplace ============== */
+interface PluginDef {
+  id: string; name: string; description: string; category: string;
+  icon: string; enabled: boolean; beta?: boolean;
+}
+
+const PLUGINS: PluginDef[] = [
+  { id: 'browser', name: 'Navegador Chromium', description: 'Automação web real via Browserless (CDP). 15 ferramentas.', category: 'Navegação', icon: '🌐', enabled: true },
+  { id: 'terminal', name: 'Terminal Bash', description: 'bash, python, node, git, pip, pnpm no sandbox isolado.', category: 'Execução', icon: '⌗', enabled: true },
+  { id: 'editor', name: 'Editor Monaco', description: 'Editor de código embutido com diffs e syntax highlight.', category: 'Execução', icon: '📝', enabled: true },
+  { id: 'exa', name: 'Exa AI — Busca web', description: 'Busca semântica com filtro de período. 10 resultados/busca.', category: 'Pesquisa', icon: '🔍', enabled: false, beta: true },
+  { id: 'gdrive', name: 'Google Drive', description: 'Anexar arquivos do Drive diretamente no chat.', category: 'Armazenamento', icon: '📁', enabled: false, beta: true },
+  { id: 'onedrive', name: 'OneDrive', description: 'Acesso a documentos do Microsoft OneDrive.', category: 'Armazenamento', icon: '💾', enabled: false, beta: true },
+  { id: 'figma', name: 'Figma', description: 'Importar designs do Figma como referência.', category: 'Design', icon: '🎨', enabled: false, beta: true },
+  { id: 'github', name: 'GitHub', description: 'Clonar repos, criar PRs, commitar mudanças.', category: 'Dev', icon: '🐙', enabled: false },
+  { id: 'slack', name: 'Slack', description: 'Enviar mensagens e buscar canais.', category: 'Comunicação', icon: '💬', enabled: false, beta: true },
+  { id: 'notion', name: 'Notion', description: 'Ler e criar páginas no Notion.', category: 'Produtividade', icon: '🗒️', enabled: false, beta: true },
+  { id: 'gmail', name: 'Gmail', description: 'Enviar e buscar e-mails.', category: 'Comunicação', icon: '✉️', enabled: false, beta: true },
+  { id: 'calendar', name: 'Google Calendar', description: 'Criar eventos e checar disponibilidade.', category: 'Produtividade', icon: '📅', enabled: false, beta: true },
+];
+
+export function PluginsSheet({ open, onOpenChange }: SheetProps) {
+  const [plugins, setPlugins] = useState<PluginDef[]>(PLUGINS);
+  const [filter, setFilter] = useState('all');
+
+  const cats = ['all', ...Array.from(new Set(PLUGINS.map((p) => p.category)))];
+  const shown = filter === 'all' ? plugins : plugins.filter((p) => p.category === filter);
+
+  const toggle = (id: string) => {
+    setPlugins((prev) => prev.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto omni-scroll border-border bg-card sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <Puzzle className="h-4 w-4 text-brand" /> Plugins
+          </SheetTitle>
+          <SheetDescription>Ferramentas e integrações disponíveis para o agente.</SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {cats.map((c) => (
+            <button
+              key={c}
+              onClick={() => setFilter(c)}
+              className={cn(
+                'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+                filter === c ? 'bg-brand text-brand-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {c === 'all' ? 'Todos' : c}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          {shown.map((p) => (
+            <div key={p.id} className={cn('flex items-start gap-3 rounded-lg border border-border bg-background/40 p-3', p.enabled && 'border-brand/30')}>
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-card text-lg">
+                {p.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium">{p.name}</span>
+                  {p.beta && <Badge variant="outline" className="h-3.5 px-1 text-[9px] text-warning">Beta</Badge>}
+                  {p.enabled && <Badge variant="outline" className="h-3.5 px-1 text-[9px] text-success">Ativo</Badge>}
+                </div>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{p.description}</p>
+              </div>
+              <button
+                onClick={() => toggle(p.id)}
+                className={cn(
+                  'relative h-5 w-9 flex-shrink-0 rounded-full transition-colors',
+                  p.enabled ? 'bg-brand' : 'bg-muted'
+                )}
+              >
+                <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform', p.enabled ? 'translate-x-4' : 'translate-x-0.5')} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border/60 bg-background/40 p-3 text-[11px] text-muted-foreground">
+          <Zap className="mb-1 inline h-3 w-3 text-brand" /> {plugins.filter((p) => p.enabled).length} de {plugins.length} plugins ativos.
+          Integrações marcadas como Beta requerem configuração adicional (OAuth/credenciais).
         </div>
       </SheetContent>
     </Sheet>

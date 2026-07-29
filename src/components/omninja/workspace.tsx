@@ -5,9 +5,11 @@ import {
   Plus, Bot, Puzzle, CalendarClock, Library, Folder, MessageSquare,
   Sparkles, Share2, BarChart3, Coins, Settings, LogOut, ChevronLeft,
   Menu, Home, ShieldCheck, FileText, Activity, User, Crown, Zap, AlertCircle,
+  Sun, Moon, Search,
 } from 'lucide-react';
 import { useOmni } from '@/lib/store';
 import { useKeyboardShortcuts } from '@/lib/use-keyboard-shortcuts';
+import { useTheme } from '@/components/theme-provider';
 import { Wordmark, OmniNinjaLogo } from './brand';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +17,8 @@ import { ModelSelector } from './model-selector';
 import { MessageList } from './messages';
 import { ChatInput } from './chat-input';
 import { ComputerPanel, ProgressWidget } from './computer-panel';
-import { AdminSheet, DocsSheet, AccountSheet, StatusSheet, LoginSheet, ScheduledSheet } from './sheets';
+import { AdminSheet, DocsSheet, AccountSheet, StatusSheet, LoginSheet, ScheduledSheet, LibrarySheet, PluginsSheet } from './sheets';
+import { CommandPalette } from './command-palette';
 import {
   Sheet, SheetContent, SheetTrigger,
 } from '@/components/ui/sheet';
@@ -27,9 +30,9 @@ import { cn } from '@/lib/utils';
 const SIDEBAR_ITEMS = [
   { icon: Plus, label: 'Nova tarefa', primary: true },
   { icon: Bot, label: 'Agente' },
-  { icon: Puzzle, label: 'Plugins' },
+  { icon: Puzzle, label: 'Plugins', sheet: 'plugins' as const },
   { icon: CalendarClock, label: 'Agendado', sheet: 'scheduled' as const },
-  { icon: Library, label: 'Biblioteca' },
+  { icon: Library, label: 'Biblioteca', sheet: 'library' as const },
 ];
 
 const PROJECTS = [
@@ -63,6 +66,10 @@ export function Workspace() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [schedOpen, setSchedOpen] = useState(false);
+  const [libOpen, setLibOpen] = useState(false);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   // load demo user + configured providers + credits on mount
   useEffect(() => {
@@ -80,6 +87,24 @@ export function Workspace() {
   };
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  // ⌘K opens the command palette (was: new task directly)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   useKeyboardShortcuts({
     onNewTask: newTask,
     onToggleSidebar: () => setSidebarOpen((v) => !v),
@@ -110,12 +135,17 @@ export function Workspace() {
                 key={it.label}
                 onClick={() => {
                   if (it.sheet === 'scheduled') setSchedOpen(true);
+                  else if (it.sheet === 'library') setLibOpen(true);
+                  else if (it.sheet === 'plugins') setPluginsOpen(true);
                 }}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <it.icon className="h-4 w-4" /> {it.label}
                 {it.sheet === 'scheduled' && (
                   <Badge variant="outline" className="ml-auto h-4 px-1 text-[9px] text-muted-foreground">cron</Badge>
+                )}
+                {it.sheet === 'plugins' && (
+                  <Badge variant="outline" className="ml-auto h-4 px-1 text-[9px] text-muted-foreground">3/12</Badge>
                 )}
               </button>
             )
@@ -200,6 +230,8 @@ export function Workspace() {
             onAccount={() => { setAccountOpen(true); setSidebarOpen(false); }}
             onStatus={() => { setStatusOpen(true); setSidebarOpen(false); }}
             onScheduled={() => { setSchedOpen(true); setSidebarOpen(false); }}
+            onLibrary={() => { setLibOpen(true); setSidebarOpen(false); }}
+            onPlugins={() => { setPluginsOpen(true); setSidebarOpen(false); }}
             onHome={() => { setView('landing'); setSidebarOpen(false); }}
             user={user}
           />
@@ -231,7 +263,11 @@ export function Workspace() {
           <Button variant="ghost" size="icon" className="hidden h-8 w-8 md:flex" aria-label="Compartilhar">
             <Share2 className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="hidden h-8 gap-1 border-border bg-card px-2 lg:flex" onClick={() => setShortcutsOpen(true)} aria-label="Atalhos">
+          <Button variant="ghost" size="icon" className="hidden h-8 w-8 md:flex" onClick={toggleTheme} aria-label="Alternar tema">
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+          <Button variant="outline" size="sm" className="hidden h-8 gap-1 border-border bg-card px-2 lg:flex" onClick={() => setPaletteOpen(true)} aria-label="Command palette">
+            <Search className="h-3 w-3 text-muted-foreground" />
             <kbd className="font-mono text-[10px] text-muted-foreground">⌘K</kbd>
           </Button>
           <CreditsCounter />
@@ -280,7 +316,26 @@ export function Workspace() {
       <StatusSheet open={statusOpen} onOpenChange={setStatusOpen} />
       <LoginSheet open={loginOpen} onOpenChange={setLoginOpen} />
       <ScheduledSheet open={schedOpen} onOpenChange={setSchedOpen} />
+      <LibrarySheet open={libOpen} onOpenChange={setLibOpen} />
+      <PluginsSheet open={pluginsOpen} onOpenChange={setPluginsOpen} />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        actions={{
+          onNewTask: newTask,
+          onHome: () => setView('landing'),
+          onDocs: () => setDocsOpen(true),
+          onAdmin: () => setAdminOpen(true),
+          onAccount: () => setAccountOpen(true),
+          onStatus: () => setStatusOpen(true),
+          onScheduled: () => setSchedOpen(true),
+          onLibrary: () => setLibOpen(true),
+          onPlugins: () => setPluginsOpen(true),
+          onShortcuts: () => setShortcutsOpen(true),
+          onToggleTheme: toggleTheme,
+        }}
+      />
     </div>
   );
 }
@@ -307,10 +362,11 @@ function CreditsCounter() {
 }
 
 function MobileSidebar({
-  onNewTask, onDocs, onAdmin, onAccount, onStatus, onScheduled, onHome, user,
+  onNewTask, onDocs, onAdmin, onAccount, onStatus, onScheduled, onLibrary, onPlugins, onHome, user,
 }: {
   onNewTask: () => void; onDocs: () => void; onAdmin: () => void;
-  onAccount: () => void; onStatus: () => void; onScheduled: () => void; onHome: () => void;
+  onAccount: () => void; onStatus: () => void; onScheduled: () => void;
+  onLibrary: () => void; onPlugins: () => void; onHome: () => void;
   user: { name: string; tier: string } | null;
 }) {
   return (
@@ -322,15 +378,21 @@ function MobileSidebar({
         <button onClick={onNewTask} className="mb-1 flex w-full items-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-brand-foreground">
           <Plus className="h-4 w-4" /> Nova tarefa
         </button>
-        {SIDEBAR_ITEMS.filter((i) => !i.primary).map((it) => (
-          <button
-            key={it.label}
-            onClick={() => { if (it.sheet === 'scheduled') onScheduled(); }}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <it.icon className="h-4 w-4" /> {it.label}
-          </button>
-        ))}
+        {SIDEBAR_ITEMS.filter((i) => !i.primary).map((it) => {
+          const action = it.sheet === 'scheduled' ? onScheduled
+            : it.sheet === 'library' ? onLibrary
+            : it.sheet === 'plugins' ? onPlugins
+            : undefined;
+          return (
+            <button
+              key={it.label}
+              onClick={() => action?.()}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <it.icon className="h-4 w-4" /> {it.label}
+            </button>
+          );
+        })}
         <div className="mt-3 border-t border-border pt-2">
           {[
             { icon: Home, label: 'Início', action: onHome },
@@ -338,6 +400,8 @@ function MobileSidebar({
             { icon: Activity, label: 'Status', action: onStatus },
             { icon: ShieldCheck, label: 'Integrações', action: onAdmin },
             { icon: CalendarClock, label: 'Agendado', action: onScheduled },
+            { icon: Library, label: 'Biblioteca', action: onLibrary },
+            { icon: Puzzle, label: 'Plugins', action: onPlugins },
             { icon: User, label: 'Conta', action: onAccount },
           ].map((it) => (
             <button key={it.label} onClick={it.action} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
@@ -362,7 +426,8 @@ function MobileSidebar({
 }
 
 const SHORTCUTS = [
-  { keys: ['⌘', 'K'], label: 'Nova conversa', desc: 'Limpa o chat e inicia uma nova tarefa' },
+  { keys: ['⌘', 'K'], label: 'Command Palette', desc: 'Busca e executa qualquer comando' },
+  { keys: ['⌘', 'N'], label: 'Nova conversa', desc: 'Limpa o chat e inicia uma nova tarefa' },
   { keys: ['⌘', 'B'], label: 'Alternar sidebar', desc: 'Mostra/esconde a barra lateral (mobile)' },
   { keys: ['⌘', '.'], label: 'Painel Computador', desc: 'Abre/fecha o painel quando há tarefa ativa' },
   { keys: ['⌘', '↵'], label: 'Focar input', desc: 'Foca o campo de mensagem' },

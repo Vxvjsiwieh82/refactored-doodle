@@ -77,8 +77,22 @@ export function useAgentRunner() {
       }
 
       // TASK path
-      const taskId = uid();
-      const timeline = buildEventTimeline(taskId, text);
+      const localId = uid();
+      const timeline = buildEventTimeline(localId, text);
+
+      // Persist the task server-side so it appears in History (Biblioteca).
+      let taskId = localId;
+      try {
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ goal: text, mode, model }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.taskId) taskId = data.taskId;
+        }
+      } catch { /* offline — keep local id */ }
 
       store.setCurrentTask({
         id: taskId,
@@ -141,16 +155,27 @@ export function useAgentRunner() {
         };
         useOmni.getState().pushMessage(sumMsg);
         const llmPrompt = `Resuma o que você acabou de fazer para completar a tarefa do usuário: "${text}". Você executou ${timeline.filter(e => e.type === 'STEP_COMPLETED').length} passos usando sub-agentes (Browser, Code, Research, Memory) e gerou artefatos. Escreva um resumo conciso em português, destacando o resultado final e listando os artefatos. Use Markdown.`;
+        let finalSummary = '';
         try {
           await streamLLMChat(llmPrompt, [{ id: 'x', role: 'user', content: llmPrompt, createdAt: Date.now() }], (chunk) => {
+            finalSummary = chunk;
             useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
           });
         } catch {
+          finalSummary = summaryText;
           await streamText(summaryText, (chunk) => {
             useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
           }, 10);
         }
         useOmni.getState().updateMessage(sumMsg.id, { streaming: false });
+        // persist completion server-side
+        try {
+          await fetch('/api/tasks', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: taskId, status: 'completed', summary: finalSummary.slice(0, 500) }),
+          });
+        } catch { /* ignore */ }
         toast.success('Tarefa concluída', { description: 'Artefatos disponíveis no painel.' });
       }, acc + 300);
     },

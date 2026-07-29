@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Check, Bot } from 'lucide-react';
+import { Copy, Check, Bot, RotateCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { OmniNinjaLogo } from './brand';
@@ -60,7 +60,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     );
   }
   return (
-    <div className="flex gap-3 animate-fade-up">
+    <div className="group flex gap-3 animate-fade-up">
       <div className="flex-shrink-0">
         <OmniNinjaLogo size={28} />
       </div>
@@ -79,7 +79,60 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             <MarkdownContent content={message.content} streaming={message.streaming} />
           )}
         </div>
+        {!message.streaming && message.content && (
+          <MessageActions content={message.content} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function MessageActions({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
+
+  const copy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="mt-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <button
+        onClick={copy}
+        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        title="Copiar"
+      >
+        {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+        {copied ? 'Copiado' : 'Copiar'}
+      </button>
+      <button
+        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        title="Regenerar"
+      >
+        <RotateCw className="h-3 w-3" />
+      </button>
+      <button
+        onClick={() => setFeedback(feedback === 'up' ? null : 'up')}
+        className={cn(
+          'flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-accent',
+          feedback === 'up' ? 'text-success' : 'text-muted-foreground hover:text-foreground'
+        )}
+        title="Boa resposta"
+      >
+        <ThumbsUp className="h-3 w-3" />
+      </button>
+      <button
+        onClick={() => setFeedback(feedback === 'down' ? null : 'down')}
+        className={cn(
+          'flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-accent',
+          feedback === 'down' ? 'text-danger' : 'text-muted-foreground hover:text-foreground'
+        )}
+        title="Resposta ruim"
+      >
+        <ThumbsDown className="h-3 w-3" />
+      </button>
     </div>
   );
 }

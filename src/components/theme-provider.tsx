@@ -2,20 +2,36 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 
-type Theme = 'dark';
+type Theme = 'dark' | 'light';
 
-const ThemeContext = createContext<{ theme: Theme }>({ theme: 'dark' });
+const ThemeContext = createContext<{ theme: Theme; setTheme: (t: Theme) => void }>({
+  theme: 'dark',
+  setTheme: () => {},
+});
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme] = useState<Theme>('dark');
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const saved = localStorage.getItem('omninja-theme') as Theme | null;
+    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+  });
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.add('dark');
-    root.style.colorScheme = 'dark';
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    }
+    root.style.colorScheme = theme;
+    try { localStorage.setItem('omninja-theme', theme); } catch {}
   }, [theme]);
 
-  return <ThemeContext.Provider value={{ theme }}>{children}</ThemeContext.Provider>;
+  const setTheme = (t: Theme) => setThemeState(t);
+
+  return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export const useTheme = () => useContext(ThemeContext);
