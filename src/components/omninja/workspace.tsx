@@ -7,6 +7,7 @@ import {
   Menu, Home, ShieldCheck, FileText, Activity, User, Crown, Zap, AlertCircle,
 } from 'lucide-react';
 import { useOmni } from '@/lib/store';
+import { useKeyboardShortcuts } from '@/lib/use-keyboard-shortcuts';
 import { Wordmark, OmniNinjaLogo } from './brand';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,17 +15,20 @@ import { ModelSelector } from './model-selector';
 import { MessageList } from './messages';
 import { ChatInput } from './chat-input';
 import { ComputerPanel, ProgressWidget } from './computer-panel';
-import { AdminSheet, DocsSheet, AccountSheet, StatusSheet, LoginSheet } from './sheets';
+import { AdminSheet, DocsSheet, AccountSheet, StatusSheet, LoginSheet, ScheduledSheet } from './sheets';
 import {
   Sheet, SheetContent, SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 const SIDEBAR_ITEMS = [
   { icon: Plus, label: 'Nova tarefa', primary: true },
   { icon: Bot, label: 'Agente' },
   { icon: Puzzle, label: 'Plugins' },
-  { icon: CalendarClock, label: 'Agendado' },
+  { icon: CalendarClock, label: 'Agendado', sheet: 'scheduled' as const },
   { icon: Library, label: 'Biblioteca' },
 ];
 
@@ -58,6 +62,7 @@ export function Workspace() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [schedOpen, setSchedOpen] = useState(false);
 
   // load demo user + configured providers + credits on mount
   useEffect(() => {
@@ -73,6 +78,13 @@ export function Workspace() {
     setCurrentTask(null);
     setComputerOpen(false);
   };
+
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  useKeyboardShortcuts({
+    onNewTask: newTask,
+    onToggleSidebar: () => setSidebarOpen((v) => !v),
+    onOpenShortcuts: () => setShortcutsOpen(true),
+  });
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground">
@@ -96,9 +108,15 @@ export function Workspace() {
             ) : (
               <button
                 key={it.label}
+                onClick={() => {
+                  if (it.sheet === 'scheduled') setSchedOpen(true);
+                }}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <it.icon className="h-4 w-4" /> {it.label}
+                {it.sheet === 'scheduled' && (
+                  <Badge variant="outline" className="ml-auto h-4 px-1 text-[9px] text-muted-foreground">cron</Badge>
+                )}
               </button>
             )
           )}
@@ -181,6 +199,7 @@ export function Workspace() {
             onAdmin={() => { setAdminOpen(true); setSidebarOpen(false); }}
             onAccount={() => { setAccountOpen(true); setSidebarOpen(false); }}
             onStatus={() => { setStatusOpen(true); setSidebarOpen(false); }}
+            onScheduled={() => { setSchedOpen(true); setSidebarOpen(false); }}
             onHome={() => { setView('landing'); setSidebarOpen(false); }}
             user={user}
           />
@@ -206,11 +225,14 @@ export function Workspace() {
             </Badge>
           </div>
           <ModelSelector />
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Estatísticas">
+          <Button variant="ghost" size="icon" className="hidden h-8 w-8 md:flex" aria-label="Estatísticas" onClick={() => setAccountOpen(true)}>
             <BarChart3 className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Compartilhar">
+          <Button variant="ghost" size="icon" className="hidden h-8 w-8 md:flex" aria-label="Compartilhar">
             <Share2 className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" className="hidden h-8 gap-1 border-border bg-card px-2 lg:flex" onClick={() => setShortcutsOpen(true)} aria-label="Atalhos">
+            <kbd className="font-mono text-[10px] text-muted-foreground">⌘K</kbd>
           </Button>
           <CreditsCounter />
         </header>
@@ -257,6 +279,8 @@ export function Workspace() {
       <AccountSheet open={accountOpen} onOpenChange={setAccountOpen} />
       <StatusSheet open={statusOpen} onOpenChange={setStatusOpen} />
       <LoginSheet open={loginOpen} onOpenChange={setLoginOpen} />
+      <ScheduledSheet open={schedOpen} onOpenChange={setSchedOpen} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   );
 }
@@ -283,10 +307,10 @@ function CreditsCounter() {
 }
 
 function MobileSidebar({
-  onNewTask, onDocs, onAdmin, onAccount, onStatus, onHome, user,
+  onNewTask, onDocs, onAdmin, onAccount, onStatus, onScheduled, onHome, user,
 }: {
   onNewTask: () => void; onDocs: () => void; onAdmin: () => void;
-  onAccount: () => void; onStatus: () => void; onHome: () => void;
+  onAccount: () => void; onStatus: () => void; onScheduled: () => void; onHome: () => void;
   user: { name: string; tier: string } | null;
 }) {
   return (
@@ -299,7 +323,11 @@ function MobileSidebar({
           <Plus className="h-4 w-4" /> Nova tarefa
         </button>
         {SIDEBAR_ITEMS.filter((i) => !i.primary).map((it) => (
-          <button key={it.label} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button
+            key={it.label}
+            onClick={() => { if (it.sheet === 'scheduled') onScheduled(); }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
             <it.icon className="h-4 w-4" /> {it.label}
           </button>
         ))}
@@ -309,6 +337,7 @@ function MobileSidebar({
             { icon: FileText, label: 'Documentação', action: onDocs },
             { icon: Activity, label: 'Status', action: onStatus },
             { icon: ShieldCheck, label: 'Integrações', action: onAdmin },
+            { icon: CalendarClock, label: 'Agendado', action: onScheduled },
             { icon: User, label: 'Conta', action: onAccount },
           ].map((it) => (
             <button key={it.label} onClick={it.action} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
@@ -329,5 +358,50 @@ function MobileSidebar({
         </div>
       </div>
     </div>
+  );
+}
+
+const SHORTCUTS = [
+  { keys: ['⌘', 'K'], label: 'Nova conversa', desc: 'Limpa o chat e inicia uma nova tarefa' },
+  { keys: ['⌘', 'B'], label: 'Alternar sidebar', desc: 'Mostra/esconde a barra lateral (mobile)' },
+  { keys: ['⌘', '.'], label: 'Painel Computador', desc: 'Abre/fecha o painel quando há tarefa ativa' },
+  { keys: ['⌘', '↵'], label: 'Focar input', desc: 'Foca o campo de mensagem' },
+  { keys: ['1'], label: 'Modo Chat', desc: 'Resposta direta, sem sandbox' },
+  { keys: ['2'], label: 'Modo Agent', desc: 'Orquestrador + 1 sub-agente' },
+  { keys: ['3'], label: 'Modo Agent MAX', desc: 'Múltiplos sub-agentes em paralelo' },
+  { keys: ['?'], label: 'Esta ajuda', desc: 'Mostra os atalhos de teclado' },
+  { keys: ['Esc'], label: 'Fechar painel', desc: 'Fecha o Computador ou sheets' },
+];
+
+function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border-border bg-card sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-brand" /> Atalhos de teclado
+          </DialogTitle>
+          <DialogDescription>Acelere seu fluxo com estes atalhos.</DialogDescription>
+        </DialogHeader>
+        <div className="mt-2 space-y-1.5">
+          {SHORTCUTS.map((s) => (
+            <div key={s.label} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent">
+              <div className="flex gap-1">
+                {s.keys.map((k) => (
+                  <kbd key={k} className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-background px-1.5 font-mono text-[11px] font-medium text-foreground shadow-sm">
+                    {k}
+                  </kbd>
+                ))}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium">{s.label}</div>
+                <div className="text-[10px] text-muted-foreground">{s.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">No Windows/Linux use Ctrl no lugar de ⌘</p>
+      </DialogContent>
+    </Dialog>
   );
 }

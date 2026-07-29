@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ShieldCheck, FileText, User, Activity, LogIn, Check, X, Zap, Coins,
   TrendingUp, Database, Globe, Bot, Crown, Settings, Bell, Monitor,
-  Cpu, HardDrive, Wifi, Server, AlertCircle,
+  Cpu, HardDrive, Wifi, Server, AlertCircle, CalendarClock, Plus, Trash2, Play, Pause,
 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
@@ -401,6 +401,213 @@ export function LoginSheet({ open, onOpenChange }: SheetProps) {
             <Button className="w-full">Entrar com e-mail</Button>
           </div>
           <p className="text-center text-[10px] text-muted-foreground">OAuth requer GOOGLE_CLIENT_ID/SECRET no .env</p>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/* ============== Scheduled Tasks (Agendado) ============== */
+interface ScheduledTask {
+  id: string; title: string; prompt: string; mode: string; model: string;
+  schedule: string; enabled: boolean; lastRunAt: string | null; nextRunAt: string | null;
+  runsCount: number;
+}
+
+export function ScheduledSheet({ open, onOpenChange }: SheetProps) {
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const fetchedRef = useRef(false);
+
+  // form state
+  const [prompt, setPrompt] = useState('');
+  const [title, setTitle] = useState('');
+  const [sched, setSched] = useState('daily 09:00');
+  const [mode, setMode] = useState('agent');
+
+  const load = () => {
+    fetch('/api/scheduled').then((r) => r.json()).then((d) => {
+      setTasks(d.tasks ?? []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!open || fetchedRef.current) return;
+    fetchedRef.current = true;
+    load();
+  }, [open]);
+
+  const create = async () => {
+    if (!prompt.trim()) return;
+    const res = await fetch('/api/scheduled', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: title || undefined, prompt, mode, model: 'glm', schedule: sched }),
+    });
+    if (res.ok) {
+      setPrompt(''); setTitle(''); setShowForm(false);
+      load();
+    }
+  };
+
+  const toggle = async (id: string, enabled: boolean) => {
+    await fetch('/api/scheduled', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, enabled: !enabled }),
+    });
+    load();
+  };
+
+  const remove = async (id: string) => {
+    await fetch(`/api/scheduled?id=${id}`, { method: 'DELETE' });
+    load();
+  };
+
+  const PRESETS = [
+    { label: 'Diário 09:00', val: 'daily 09:00' },
+    { label: 'Diário 18:00', val: 'daily 18:00' },
+    { label: 'Segunda 10:00', val: 'weekly mon 10:00' },
+    { label: 'A cada 2h', val: 'every 2h' },
+    { label: 'A cada 30min', val: 'every 30m' },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto omni-scroll border-border bg-card sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-brand" /> Tarefas Agendadas
+          </SheetTitle>
+          <SheetDescription>Programe tarefas recorrentes — até 20 simultâneas no plano Business.</SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-5">
+          <Button className="w-full gap-1.5" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+            {showForm ? 'Cancelar' : 'Nova tarefa agendada'}
+          </Button>
+        </div>
+
+        {showForm && (
+          <div className="mt-3 space-y-3 rounded-lg border border-border bg-background/40 p-3 animate-fade-up">
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Título (opcional)</label>
+              <input
+                value={title} onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm"
+                placeholder="Relatório semanal de mercado"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Prompt da tarefa</label>
+              <textarea
+                value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3}
+                className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm"
+                placeholder="Pesquise notícias de IA da semana e gere um relatório…"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Agendamento</label>
+              <input
+                value={sched} onChange={(e) => setSched(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs"
+                placeholder="daily 09:00"
+              />
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.val}
+                    onClick={() => setSched(p.val)}
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[10px] transition-colors',
+                      sched === p.val
+                        ? 'border-brand bg-brand/10 text-brand'
+                        : 'border-border text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Formatos: <code className="rounded bg-accent px-1">daily HH:MM</code>,{' '}
+                <code className="rounded bg-accent px-1">weekly &lt;dow&gt; HH:MM</code>,{' '}
+                <code className="rounded bg-accent px-1">every Nh</code>,{' '}
+                <code className="rounded bg-accent px-1">once YYYY-MM-DD HH:MM</code>
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Modo</span>
+              {(['chat', 'agent', 'agent_max'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                    mode === m ? 'bg-brand text-brand-foreground' : 'bg-accent text-muted-foreground'
+                  )}
+                >
+                  {m === 'agent_max' ? 'Agent MAX' : m.charAt(0).toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
+            <Button className="w-full" onClick={create} disabled={!prompt.trim()}>Agendar tarefa</Button>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-2">
+          {loading && <div className="omni-shimmer h-16 rounded-lg" />}
+          {!loading && tasks.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center">
+              <CalendarClock className="mx-auto h-8 w-8 text-muted-foreground/40" />
+              <p className="mt-2 text-sm text-muted-foreground">Nenhuma tarefa agendada ainda.</p>
+              <p className="text-[10px] text-muted-foreground/70">Crie uma para rodar automaticamente.</p>
+            </div>
+          )}
+          {tasks.map((t) => (
+            <div key={t.id} className={cn('rounded-lg border border-border bg-background/40 p-3', !t.enabled && 'opacity-60')}>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-xs font-medium">{t.title}</span>
+                    <Badge variant="outline" className="h-3.5 px-1 text-[9px] uppercase">{t.mode === 'agent_max' ? 'MAX' : t.mode}</Badge>
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{t.prompt}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1 font-mono"><CalendarClock className="h-2.5 w-2.5" /> {t.schedule}</span>
+                    {t.nextRunAt && (
+                      <span className="flex items-center gap-1 text-brand">
+                        <Play className="h-2.5 w-2.5" /> próxima: {new Date(t.nextRunAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {t.runsCount > 0 && <span>{t.runsCount}x executada</span>}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => toggle(t.id, t.enabled)}
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded transition-colors',
+                      t.enabled ? 'bg-success/15 text-success hover:bg-success/25' : 'bg-muted text-muted-foreground hover:bg-accent'
+                    )}
+                    title={t.enabled ? 'Pausar' : 'Ativar'}
+                  >
+                    {t.enabled ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                  </button>
+                  <button
+                    onClick={() => remove(t.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-danger/15 hover:text-danger"
+                    title="Excluir"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </SheetContent>
     </Sheet>

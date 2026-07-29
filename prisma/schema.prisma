@@ -30,6 +30,7 @@ model User {
   projects      Project[]
   creditTxns    CreditTransaction[]
   sessions      Session[]
+  scheduled     ScheduledTask[]
 }
 
 model Session {
@@ -113,6 +114,24 @@ model Artifact {
   path        String
   sizeBytes   Int      @default(0)
   createdAt   DateTime @default(now())
+}
+
+// Scheduled / recurring tasks (Seção 10.6 — "Agendado" sidebar item)
+model ScheduledTask {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  prompt      String
+  mode        String   @default("agent") // chat | agent | agent_max
+  model       String   @default("glm")
+  schedule    String   // cron-like: 'daily 09:00' | 'weekly mon 10:00' | 'every 2h' | 'once 2026-08-01 14:00'
+  enabled     Boolean  @default(true)
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  runsCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model CreditTransaction {

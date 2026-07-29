@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowRight, Bot, Code2, Globe, MousePointerClick, Play, Repeat,
   Terminal as TerminalIcon, Sparkles, Check, Zap, ShieldCheck, Layers,
-  CalendarClock, PanelRightOpen, Star, ChevronDown, Menu, X,
+  CalendarClock, PanelRightOpen, Star, ChevronDown, Menu, X, Wand2,
+  Cpu, FileSearch, Rocket, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -227,6 +228,45 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ---- How it works ---- */}
+      <section className="border-b border-border/60 py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <SectionHeader
+            eyebrow="Como funciona"
+            title="Da mensagem ao resultado em 4 passos"
+            subtitle="Sem caixa-preta. Você vê cada decisão do Orquestrador e cada ação dos sub-agentes."
+          />
+          <div className="mt-12 grid gap-6 md:grid-cols-4">
+            {[
+              { n: '01', icon: MessageSquare, title: 'Você descreve', desc: 'Digite a tarefa em linguagem natural. O classificador decide se é pergunta (Chat) ou tarefa (Agent).', accent: '#38bdf8' },
+              { n: '02', icon: Wand2, title: 'Orquestrador planeja', desc: 'Decompõe o objetivo em passos e delega a sub-agentes especializados (Browser, Code, Research).', accent: '#818cf8' },
+              { n: '03', icon: Cpu, title: 'Sub-agentes executam', desc: 'Sandbox isolado, terminal real, navegador Chromium. Cada ação aparece no painel Computador ao vivo.', accent: '#a855f7' },
+              { n: '04', icon: Rocket, title: 'Entrega o resultado', desc: 'Site publicado, arquivo, relatório. Artefatos ficam disponíveis e a sessão é replayável.', accent: '#22c55e' },
+            ].map((step, i) => (
+              <div key={step.n} className="relative">
+                {i < 3 && (
+                  <div className="absolute left-full top-11 hidden h-px w-full -translate-x-3 bg-gradient-to-r from-brand/40 via-brand/15 to-transparent md:block" />
+                )}
+                <div className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-all hover:border-brand/40 hover:bg-accent/30">
+                  <div className="absolute -right-4 -top-4 font-serif text-5xl font-bold text-muted-foreground/10 transition-colors group-hover:text-brand/10">
+                    {step.n}
+                  </div>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border"
+                    style={{ borderColor: `${step.accent}55`, backgroundColor: `${step.accent}18`, color: step.accent }}>
+                    <step.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 font-medium">{step.title}</h3>
+                  <p className="mt-1.5 text-sm text-muted-foreground">{step.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---- Stats ---- */}
+      <StatsSection />
+
       {/* ---- Features ---- */}
       <section id="features" className="border-b border-border/60 py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -408,6 +448,64 @@ function SectionHeader({ eyebrow, title, subtitle }: { eyebrow: string; title: s
   );
 }
 
+/** Animated stats counter — counts up when scrolled into view. */
+function StatsSection() {
+  const stats = [
+    { value: 10, suffix: '', label: 'Modelos de IA', desc: 'Claude, GPT, GLM, Gemini, Kimi…' },
+    { value: 29, suffix: '', label: 'Ferramentas internas', desc: 'Browser, terminal, arquivos, deploy' },
+    { value: 100, suffix: '+', label: 'Sub-agentes em paralelo', desc: 'Modo Agent MAX (Wide Research)' },
+    { value: 1, suffix: 'M', label: 'Tokens de contexto', desc: 'GLM-5.2 e DeepSeek V4' },
+  ];
+  return (
+    <section className="border-b border-border/60 bg-gradient-to-b from-background to-card/40 py-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((s) => (
+            <AnimatedStat key={s.label} {...s} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnimatedStat({ value, suffix, label, desc }: { value: number; suffix: string; label: string; desc: string }) {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && !started.current) {
+        started.current = true;
+        const duration = 1200;
+        const start = performance.now();
+        const tick = (now: number) => {
+          const p = Math.min(1, (now - start) / duration);
+          const eased = 1 - Math.pow(1 - p, 3);
+          setCount(Math.round(value * eased));
+          if (p < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
+    }, { threshold: 0.4 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [value]);
+
+  return (
+    <div ref={ref} className="text-center">
+      <div className="font-serif text-4xl font-semibold tracking-tight text-gradient-brand sm:text-5xl">
+        {count.toLocaleString('pt-BR')}{suffix}
+      </div>
+      <div className="mt-1 text-sm font-medium">{label}</div>
+      <div className="text-[11px] text-muted-foreground">{desc}</div>
+    </div>
+  );
+}
+
 function HeroPreview() {
   return (
     <div className="mx-auto mt-14 max-w-5xl">
@@ -481,9 +579,37 @@ function Footer() {
     { title: 'Recursos', links: ['Documentação', 'Guia de início', 'API (em breve)', 'Comunidade', 'Suporte'] },
     { title: 'Legal', links: ['Termos de Uso', 'Privacidade', 'Segurança', 'LGPD', 'Cookies'] },
   ];
+  const [email, setEmail] = useState('');
+  const [subscribed, setSubscribed] = useState(false);
+
+  const subscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubscribed(true);
+    setTimeout(() => { setSubscribed(false); setEmail(''); }, 3000);
+  };
+
   return (
     <footer className="mt-auto border-t border-border bg-background">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        {/* Newsletter */}
+        <div className="mb-10 flex flex-col items-start gap-4 rounded-2xl border border-border bg-gradient-to-br from-card to-background p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-serif text-lg font-semibold">Receba novidades</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Novos modelos, recursos e changelog. Sem spam.</p>
+          </div>
+          <form onSubmit={subscribe} className="flex w-full max-w-md gap-2">
+            <input
+              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="seu@email.com"
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-brand focus:outline-none"
+            />
+            <Button type="submit" className="gap-1.5" variant={subscribed ? 'outline' : 'default'}>
+              {subscribed ? <><Check className="h-3.5 w-3.5" /> Inscrito!</> : 'Inscrever'}
+            </Button>
+          </form>
+        </div>
+
         <div className="grid gap-8 md:grid-cols-6">
           <div className="md:col-span-2">
             <Wordmark />

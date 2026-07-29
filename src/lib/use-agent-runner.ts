@@ -53,15 +53,25 @@ export function useAgentRunner() {
       const isTask = cls === 'task' && mode !== 'chat';
 
       if (!isTask) {
-        // simple chat reply — stream a canned-but-relevant answer
+        // CHAT mode — real LLM streaming via /api/chat (GLM-5.2)
         const aMsg: ChatMessage = {
-          id: uid(), role: 'assistant', content: '', model, streaming: true, createdAt: Date.now(),
+          id: uid(), role: 'assistant', content: '', model: 'glm-5.2', streaming: true, createdAt: Date.now(),
         };
         store.pushMessage(aMsg);
-        const reply = chatReply(text);
-        await streamText(reply, (chunk) => {
-          useOmni.getState().updateMessage(aMsg.id, { content: chunk });
-        }, 12);
+        // re-read fresh messages (Zustand returns new array on setState)
+        const freshMessages = useOmni.getState().messages;
+        try {
+          await streamLLMChat(text, freshMessages, (chunk) => {
+            useOmni.getState().updateMessage(aMsg.id, { content: chunk });
+          });
+        } catch (err: any) {
+          // graceful fallback to canned reply if LLM unavailable
+          const reply = chatReply(text);
+          await streamText(reply, (chunk) => {
+            useOmni.getState().updateMessage(aMsg.id, { content: chunk });
+          }, 10);
+          toast.warning('LLM indisponível — usando resposta local', { description: err?.message });
+        }
         useOmni.getState().updateMessage(aMsg.id, { streaming: false });
         return;
       }
@@ -124,15 +134,22 @@ export function useAgentRunner() {
         acc += ev.type === 'BROWSER_ACTION' ? 700 : ev.type === 'TERMINAL_OUTPUT' ? 650 : 450;
       }
 
-      // final assistant summary
+      // final assistant summary — use real LLM for a contextual summary
       schedule(async () => {
         const sumMsg: ChatMessage = {
-          id: uid(), role: 'assistant', content: '', model, streaming: true, createdAt: Date.now(),
+          id: uid(), role: 'assistant', content: '', model: 'glm-5.2', streaming: true, createdAt: Date.now(),
         };
         useOmni.getState().pushMessage(sumMsg);
-        await streamText(summaryText, (chunk) => {
-          useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
-        }, 10);
+        const llmPrompt = `Resuma o que você acabou de fazer para completar a tarefa do usuário: "${text}". Você executou ${timeline.filter(e => e.type === 'STEP_COMPLETED').length} passos usando sub-agentes (Browser, Code, Research, Memory) e gerou artefatos. Escreva um resumo conciso em português, destacando o resultado final e listando os artefatos. Use Markdown.`;
+        try {
+          await streamLLMChat(llmPrompt, [{ id: 'x', role: 'user', content: llmPrompt, createdAt: Date.now() }], (chunk) => {
+            useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
+          });
+        } catch {
+          await streamText(summaryText, (chunk) => {
+            useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
+          }, 10);
+        }
         useOmni.getState().updateMessage(sumMsg.id, { streaming: false });
         toast.success('Tarefa concluída', { description: 'Artefatos disponíveis no painel.' });
       }, acc + 300);
@@ -156,6 +173,61 @@ async function classify(text: string): Promise<'chat' | 'task'> {
   } catch {
     return 'task';
   }
+}
+
+/**
+ * Streams a real LLM chat response from /api/chat (SSE → GLM-5.2).
+ * Falls back throws so caller can use a canned reply.
+ */
+async function streamLLMChat(
+  text: string,
+  history: ChatMessage[],
+  onChunk: (full: string) => void
+) {
+  const messages = history
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content && !m.streaming)
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`chat HTTP ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      const payload = trimmed.slice(6);
+      if (payload === '{}' || payload === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(payload);
+        if (obj.type === 'delta' && obj.text) {
+          full += obj.text;
+          onChunk(full);
+        } else if (obj.type === 'error') {
+          throw new Error(obj.error);
+        }
+      } catch {
+        // ignore parse errors on partial chunks
+      }
+    }
+  }
+  if (full) onChunk(full);
 }
 
 async function streamText(text: string, onChunk: (full: string) => void, speed = 14) {

@@ -68,3 +68,46 @@ Stage Summary:
 - Stack completo operacional: Next.js 16 (porta 3000) + event-stream socket.io (3003) + controle HTTP (3004) + Prisma/SQLite + 6 APIs.
 - Cron job webDevReview criado (job_id 297916, a cada 15 min, tz Asia/Shanghai) para continuação autônoma do desenvolvimento.
 - Pronto para revisão/continuação pela próxima fase.
+
+---
+Task ID: 2
+Agent: Z.ai Code (webDevReview cron, round 1)
+Task: QA via agent-browser + adicionar features (LLM real, tarefas agendadas, atalhos de teclado, polish da landing)
+
+Work Log:
+- QA via agent-browser identificou 3 issues: (1) modo Chat retornava respostas canned, não LLM real; (2) botão "Agendado" da sidebar não tinha ação; (3) sem atalhos de teclado.
+- **LLM real integrado** via z-ai-web-dev-sdk (GLM-5.2):
+  * Novo `/api/chat` (POST, SSE streaming) — chama `zai.chat.completions.create` com system prompt OmniNinja PT-BR, persiste user+assistant messages no DB, debita 1 crédito/chat.
+  * SDK `stream:true` retorna bytes crus neste env → solução: chamada non-streaming + chunking server-side word-by-word com delay 18ms para UX de streaming real.
+  * `use-agent-runner.ts` atualizado: modo Chat agora chama `streamLLMChat()` (SSE reader) que alimenta `updateMessage` token-a-token. Fallback gracioso para canned reply se LLM falhar. Summary de tasks também usa LLM real.
+  * Fix bug: `store.messages` era stale após `pushMessage` (Zustand retorna array novo) → re-read `useOmni.getState().messages` + filtro de mensagens empty/streaming.
+  * Verificado: "Qual a capital do Brasil?" → "A capital do Brasil é **Brasília**." com badge glm-5.2. "Explique em 2 frases o que é um agente de IA autônomo" → resposta substantiva real. Créditos decrementam (5000→4997 após 3 msgs).
+- **Tarefas Agendadas** (item "Agendado" da sidebar, Seção 10.6):
+  * Prisma: novo model `ScheduledTask` (userId, title, prompt, mode, model, schedule, enabled, lastRunAt, nextRunAt, runsCount). `bun run db:push` OK.
+  * `/api/scheduled` (GET lista, POST cria com computeNextRun, PATCH toggle enabled, DELETE). Parser de schedule: `daily HH:MM`, `weekly <dow> HH:MM`, `every Nh/Nm`, `once YYYY-MM-DD HH:MM`.
+  * `ScheduledSheet` component: form (title, prompt, schedule com presets chips, mode pills), lista de tasks com toggle play/pause, delete, próxima execução, runsCount.
+  * Wire: sidebar "Agendado" (desktop + mobile drawer) abre o sheet. Badge "cron" no item.
+  * Verificado: criada task "Relatório semanal de IA" daily 09:00 → persiste, mostra próxima execução.
+- **Atalhos de teclado** (a11y + power user):
+  * `use-keyboard-shortcuts.ts` hook: ⌘/Ctrl+K (nova conversa), ⌘/Ctrl+B (toggle sidebar), ⌘/Ctrl+. (toggle Computador), ⌘/Ctrl+Enter (focar input), 1/2/3 (modo Chat/Agent/Agent MAX), ? (ajuda), Esc (fechar painel). Ignora quando digitando (exceto ⌘K).
+  * `ShortcutsDialog` component com tabela de atalhos + <kbd> styling.
+  * Botão "⌘K" no header do workspace (lg+) abre o dialog.
+  * Verificado: ⌘K cria nova conversa (toast confirm), ? abre dialog de atalhos.
+- **Polish da landing** (mandatory styling improvements):
+  * Nova seção "Como funciona" — 4 step cards (01-04) com ícones coloridos, números decorativos grandes, connector lines brand-tinted entre cards no desktop.
+  * Nova seção "Stats" com contadores animados (IntersectionObserver + requestAnimationFrame easing) — 10 modelos, 29 ferramentas, 100+ sub-agentes, 1M tokens. Gradient text.
+  * Newsletter no footer — form de email com feedback "Inscrito!" por 3s.
+- Fix: dev server precisou restart após `db:push` (Prisma client singleton cached em `globalForPrisma`). Reiniciado manualmente.
+- Lint limpo. Dev log sem erros runtime.
+
+Stage Summary:
+- **LLM real funcional**: modo Chat agora usa GLM-5.2 via z-ai-web-dev-sdk com streaming SSE. Não é mais canned. Persiste mensagens no DB, debita créditos.
+- **3 features novas**: LLM real + Tarefas Agendadas (CRUD completo) + Atalhos de teclado (9 atalhos + dialog de ajuda).
+- **3 polish de landing**: seção "Como funciona" (4 steps), stats animados, newsletter.
+- Verificado end-to-end com agent-browser + VLM: chat real, scheduled sheet CRUD, atalhos ⌘K e ?, novas seções da landing renderizam.
+- Stack: Next.js 16 (3000) + event-stream socket.io (3003/3004) + Prisma/SQLite + 7 APIs (me, classify, chat, integrations, credits, tasks, scheduled).
+
+Unresolved / próximos passos:
+- O cron job webDevReview continua a cada 15 min — próximas rodadas podem: conectar Browserless real, replay de EventRow persistido (history sheet), UI de "Plugins" e "Biblioteca", mais variações de BrowserMock, comand palette (Cmd+K com search), tema light toggle, tradução EN.
+- Sandbox Docker / OAuth / Stripe continuam como stubs (requerem infra/creds externas).
+- LLM está como GLM-5.2 fixo (demoMode) — para multi-modelo real, preencher .env com chaves OpenRouter/provedores.
