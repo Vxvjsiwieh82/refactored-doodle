@@ -76,30 +76,15 @@ export function useAgentRunner() {
         return;
       }
 
-      // TASK path
-      const localId = uid();
-      const timeline = buildEventTimeline(localId, text);
-
-      // Persist the task server-side so it appears in History (Biblioteca).
-      let taskId = localId;
-      try {
-        const res = await fetch('/api/tasks', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ goal: text, mode, model }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.taskId) taskId = data.taskId;
-        }
-      } catch { /* offline — keep local id */ }
-
+      // TASK path — REAL agent via /api/agent/run (SSE)
+      // The server runs the actual agent loop (LLM + Browserless + shell),
+      // streaming real events back. No more scripted timeline.
       store.setCurrentTask({
-        id: taskId,
+        id: uid(),
         goal: text,
         mode,
         model,
-        status: 'queued',
+        status: 'running',
         steps: [],
         stepsDone: 0,
         events: [],
@@ -116,68 +101,47 @@ export function useAgentRunner() {
       };
       store.pushMessage(introMsg);
       await streamText(
-        `Vou decompor essa tarefa e delegar aos sub-agentes. Acompanhe pelo painel **Computador** à direita — cada ação aparece em tempo real. 🥷`,
+        `Vou executar essa tarefa com o agente REAL — navegador e terminal de verdade. Acompanhe pelo painel **Computador** à direita. 🥷`,
         (chunk) => useOmni.getState().updateMessage(introMsg.id, { content: chunk }),
         10
       );
       useOmni.getState().updateMessage(introMsg.id, { streaming: false });
 
-      // play timeline
-      let acc = 400;
-      let summaryText = '';
-      const browserEvents: AgentEvent[] = [];
-      for (const ev of timeline) {
-        schedule(() => {
-          useOmni.getState().appendEvent(ev);
-          // auto-switch computer tab based on event
-          if (ev.type === 'BROWSER_ACTION') {
-            useOmni.getState().setComputerTab('browser');
-          } else if (ev.type === 'TERMINAL_OUTPUT') {
-            useOmni.getState().setComputerTab('terminal');
-          } else if (ev.type === 'FILE_CHANGED') {
-            useOmni.getState().setComputerTab('code');
-          } else if (ev.type === 'PLAN_CREATED') {
-            useOmni.getState().setComputerTab('code');
-          }
-        }, acc);
+      // Run the REAL agent via SSE
+      let finalSummary = '';
+      try {
+        await runRealAgent(text, mode, model, (event) => {
+          const s = useOmni.getState();
+          s.appendEvent(event);
 
-        if (ev.type === 'TASK_COMPLETED') {
-          summaryText = ev.summary;
-        }
-        // pacing: browser actions & terminal a bit slower for realism
-        acc += ev.type === 'BROWSER_ACTION' ? 700 : ev.type === 'TERMINAL_OUTPUT' ? 650 : 450;
+          // auto-switch computer tab based on event type
+          if (event.type === 'BROWSER_ACTION') {
+            s.setComputerTab('browser');
+          } else if (event.type === 'TERMINAL_OUTPUT') {
+            s.setComputerTab('terminal');
+          } else if (event.type === 'FILE_CHANGED') {
+            s.setComputerTab('code');
+          } else if (event.type === 'PLAN_CREATED') {
+            s.setComputerTab('code');
+          } else if (event.type === 'TASK_COMPLETED') {
+            finalSummary = event.summary;
+          }
+        }, (screenshot) => {
+          useOmni.getState().setScreenshot(screenshot);
+        });
+      } catch (err: any) {
+        finalSummary = `Erro na execução: ${err.message}`;
       }
 
-      // final assistant summary — use real LLM for a contextual summary
-      schedule(async () => {
-        const sumMsg: ChatMessage = {
-          id: uid(), role: 'assistant', content: '', model: 'glm-5.2', streaming: true, createdAt: Date.now(),
-        };
-        useOmni.getState().pushMessage(sumMsg);
-        const llmPrompt = `Resuma o que você acabou de fazer para completar a tarefa do usuário: "${text}". Você executou ${timeline.filter(e => e.type === 'STEP_COMPLETED').length} passos usando sub-agentes (Browser, Code, Research, Memory) e gerou artefatos. Escreva um resumo conciso em português, destacando o resultado final e listando os artefatos. Use Markdown.`;
-        let finalSummary = '';
-        try {
-          await streamLLMChat(llmPrompt, [{ id: 'x', role: 'user', content: llmPrompt, createdAt: Date.now() }], (chunk) => {
-            finalSummary = chunk;
-            useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
-          });
-        } catch {
-          finalSummary = summaryText;
-          await streamText(summaryText, (chunk) => {
-            useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
-          }, 10);
-        }
-        useOmni.getState().updateMessage(sumMsg.id, { streaming: false });
-        // persist completion server-side
-        try {
-          await fetch('/api/tasks', {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: taskId, status: 'completed', summary: finalSummary.slice(0, 500) }),
-          });
-        } catch { /* ignore */ }
-        toast.success('Tarefa concluída', { description: 'Artefatos disponíveis no painel.' });
-      }, acc + 300);
+      // final assistant summary message
+      const sumMsg: ChatMessage = {
+        id: uid(), role: 'assistant', content: '', model: 'glm-5.2', streaming: true, createdAt: Date.now(),
+      };
+      useOmni.getState().pushMessage(sumMsg);
+      await streamText(finalSummary || 'Tarefa concluída.', (chunk) => {
+        useOmni.getState().updateMessage(sumMsg.id, { content: chunk });
+      }, 8);
+      useOmni.getState().updateMessage(sumMsg.id, { streaming: false });
     },
     [clearTimers, schedule]
   );
@@ -197,6 +161,67 @@ async function classify(text: string): Promise<'chat' | 'task'> {
     return data.kind;
   } catch {
     return 'task';
+  }
+}
+
+/**
+ * Runs the REAL agent via /api/agent/run (SSE).
+ * Receives events and screenshots from the server-side agent loop
+ * (LLM + Browserless + shell), feeds them into the store.
+ */
+async function runRealAgent(
+  goal: string,
+  mode: string,
+  model: string,
+  onEvent: (event: AgentEvent) => void,
+  onScreenshot: (base64: string) => void
+) {
+  const res = await fetch('/api/agent/run', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ goal, mode, model }),
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`agent run HTTP ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let pendingScreenshot = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      const payload = trimmed.slice(6);
+      if (payload === '{}' || payload === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(payload);
+        if (obj.type === 'screenshot') {
+          pendingScreenshot = obj.data;
+          onScreenshot(pendingScreenshot);
+        } else if (obj.type === 'event' && obj.event) {
+          // If the event has hasScreenshot flag, attach the pending screenshot
+          const event = obj.event as AgentEvent;
+          if (obj.hasScreenshot && pendingScreenshot) {
+            (event as any).screenshotBase64 = pendingScreenshot;
+          }
+          onEvent(event);
+        } else if (obj.type === 'error') {
+          throw new Error(obj.error);
+        }
+      } catch (e) {
+        // ignore parse errors on partial chunks
+      }
+    }
   }
 }
 

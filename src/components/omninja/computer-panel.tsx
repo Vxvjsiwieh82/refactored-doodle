@@ -145,6 +145,7 @@ function TerminalView() {
 function BrowserView() {
   const task = useOmni((s) => s.currentTask);
   const live = useOmni((s) => s.live);
+  const screenshot = useOmni((s) => s.currentTask?.currentScreenshot);
 
   const browserEvents = useMemo(
     () => (task?.events ?? []).filter((e) => e.type === 'BROWSER_ACTION') as Extract<AgentEvent, { type: 'BROWSER_ACTION' }>[],
@@ -171,17 +172,30 @@ function BrowserView() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* viewport */}
+        {/* viewport — shows REAL screenshot when available, falls back to mock */}
         <div className="relative flex-1 overflow-hidden bg-white">
-          <BrowserMock url={url} />
+          {screenshot ? (
+            <img
+              src={`data:image/png;base64,${screenshot}`}
+              alt="Browser screenshot"
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <BrowserMock url={url} />
+          )}
           {/* virtual cursor */}
           <VirtualCursor active={live && task?.status === 'running'} />
-          {actions.length === 0 && (
+          {actions.length === 0 && !screenshot && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/80">
               <div className="text-center text-muted-foreground">
                 <Globe className="mx-auto h-8 w-8 opacity-40" />
                 <p className="mt-2 text-xs">Aguardando o Browser Agent…</p>
               </div>
+            </div>
+          )}
+          {screenshot && (
+            <div className="absolute bottom-2 left-2 rounded bg-background/80 px-2 py-0.5 text-[9px] text-success backdrop-blur">
+              ● Screenshot REAL (Browserless)
             </div>
           )}
         </div>

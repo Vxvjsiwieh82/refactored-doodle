@@ -9,7 +9,7 @@ export type AgentEvent =
   | { type: 'PLAN_CREATED'; taskId: string; steps: PlanStep[]; ts: number }
   | { type: 'STEP_STARTED'; taskId: string; stepId: string; agent: string; instruction: string; ts: number }
   | { type: 'AGENT_THINKING'; taskId: string; agent: string; text: string; ts: number }
-  | { type: 'BROWSER_ACTION'; taskId: string; action: string; url?: string; detail?: string; ts: number }
+  | { type: 'BROWSER_ACTION'; taskId: string; action: string; url?: string; detail?: string; screenshotBase64?: string; ts: number }
   | { type: 'TERMINAL_OUTPUT'; taskId: string; cmd: string; stdout: string; stderr: string; exitCode: number; ts: number }
   | { type: 'FILE_CHANGED'; taskId: string; path: string; diff?: string; ts: number }
   | { type: 'STEP_COMPLETED'; taskId: string; stepId: string; success: boolean; result: string; ts: number }

@@ -32,6 +32,7 @@ export interface TaskRun {
   summary?: string;
   startedAt: number;
   finishedAt?: number;
+  currentScreenshot?: string; // base64 PNG from real browser
 }
 
 interface OmniState {
@@ -67,6 +68,7 @@ interface OmniState {
   appendEvent: (e: AgentEvent) => void;
   updateTaskStatus: (s: TaskRun['status']) => void;
   incStepsDone: () => void;
+  setScreenshot: (s: string | undefined) => void;
 
   // computer panel
   computerOpen: boolean;
@@ -142,6 +144,10 @@ export const useOmni = create<OmniState>((set) => ({
   incStepsDone: () =>
     set((s) =>
       s.currentTask ? { currentTask: { ...s.currentTask, stepsDone: s.currentTask.stepsDone + 1 } } : s
+    ),
+  setScreenshot: (sc) =>
+    set((s) =>
+      s.currentTask ? { currentTask: { ...s.currentTask, currentScreenshot: sc } } : s
     ),
 
   computerOpen: false,
