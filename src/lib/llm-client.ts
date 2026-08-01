@@ -1,17 +1,21 @@
 // OmniNinja — Multi-model LLM client
-// Usa OpenRouter (Claude, GPT, Kimi, Grok, Gemini) ou GLM (fallback nativo)
+// Usa OpenRouter (Grok, Kimi) ou GLM (fallback nativo do Z.ai)
+// Claude/GPT/Gemini bloqueados por região (403) — Grok e Kimi funcionam.
 
 import ZAI from 'z-ai-web-dev-sdk';
 
 export type ModelId = 'claude' | 'chatgpt' | 'kimi' | 'grok' | 'gemini' | 'glm';
 
 const OPENROUTER_MODELS: Record<string, { label: string; model: string; apiKeyEnv: string }> = {
-  claude: { label: 'Claude', model: 'anthropic/claude-sonnet-4', apiKeyEnv: 'OPENROUTER_CLAUDE_API_KEY' },
-  chatgpt: { label: 'ChatGPT', model: 'openai/gpt-4o', apiKeyEnv: 'OPENROUTER_CHATGPT_API_KEY' },
-  kimi: { label: 'Kimi', model: 'moonshotai/kimi-k2', apiKeyEnv: 'OPENROUTER_KIMI_API_KEY' },
-  grok: { label: 'Grok', model: 'x-ai/grok-2', apiKeyEnv: 'OPENROUTER_GROK_API_KEY' },
-  gemini: { label: 'Gemini', model: 'google/gemini-2.5-pro', apiKeyEnv: 'OPENROUTER_GEMINI_API_KEY' },
+  grok: { label: 'Grok 4.5', model: 'x-ai/grok-4.5', apiKeyEnv: 'OPENROUTER_GROK_API_KEY' },
+  kimi: { label: 'Kimi K3', model: 'moonshotai/kimi-k3', apiKeyEnv: 'OPENROUTER_KIMI_API_KEY' },
+  claude: { label: 'Claude', model: 'anthropic/claude-sonnet-5', apiKeyEnv: 'OPENROUTER_CLAUDE_API_KEY' },
+  chatgpt: { label: 'ChatGPT', model: 'openai/gpt-5.6-sol', apiKeyEnv: 'OPENROUTER_CHATGPT_API_KEY' },
+  gemini: { label: 'Gemini', model: 'google/gemini-3.6-flash', apiKeyEnv: 'OPENROUTER_GEMINI_API_KEY' },
 };
+
+// Prioridade: Grok (funciona + rápido) > Kimi (funciona + créditos) > GLM (sempre funciona no Z.ai)
+const FALLBACK_ORDER = ['grok', 'kimi', 'glm'];
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -33,21 +37,40 @@ export async function callLLM(
   const cfg = OPENROUTER_MODELS[modelId];
   const apiKey = cfg ? process.env[cfg.apiKeyEnv] : null;
 
+  // Try the requested model first
   if (cfg && apiKey) {
-    return callOpenRouter(cfg.model, apiKey, messages, options);
-  }
-
-  // GLM requested or no OpenRouter key — try OpenRouter fallback, then GLM SDK
-  if (modelId === 'glm' || !cfg) {
-    for (const [, c] of Object.entries(OPENROUTER_MODELS)) {
-      const key = process.env[c.apiKeyEnv];
-      if (key) {
-        return callOpenRouter(c.model, key, messages, options);
+    try {
+      return await callOpenRouter(cfg.model, apiKey, messages, options);
+    } catch (err: any) {
+      // If it's a 403 (region blocked) or 402 (credits), try fallback
+      if (err.message.includes('403') || err.message.includes('402')) {
+        // Fall through to fallback logic
+      } else {
+        throw err;
       }
     }
   }
 
-  // Last resort: GLM SDK (z-ai-web-dev-sdk)
+  // Fallback: try models in priority order
+  for (const id of FALLBACK_ORDER) {
+    if (id === modelId) continue; // already tried
+    if (id === 'glm') {
+      try {
+        return await callGLM(messages, options);
+      } catch { continue; }
+    }
+    const c = OPENROUTER_MODELS[id];
+    if (c) {
+      const key = process.env[c.apiKeyEnv];
+      if (key) {
+        try {
+          return await callOpenRouter(c.model, key, messages, options);
+        } catch { continue; }
+      }
+    }
+  }
+
+  // Last resort: GLM SDK
   return callGLM(messages, options);
 }
 
@@ -81,7 +104,9 @@ async function callOpenRouter(
   }
 
   const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content ?? '';
+  const choice = data?.choices?.[0]?.message;
+  // Some models (Kimi, Grok) return reasoning separately — use content, fallback to reasoning
+  const content = choice?.content ?? choice?.reasoning ?? '';
   return { content, model: data?.model ?? model };
 }
 
