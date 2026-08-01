@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { consumeCredits, CREDIT_COSTS } from '@/lib/credits';
 import { db } from '@/lib/db';
 import { classifyMessage } from '@/lib/orchestrator';
+import { callLLM, getModelLabel } from '@/lib/llm-client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   const body = await req.json().catch(() => ({} as any));
   const incoming = Array.isArray(body.messages) ? body.messages : [];
+  const chatModel = body.model || 'grok';
   const lastUser = [...incoming].reverse().find((m: any) => m.role === 'user');
   if (!lastUser) {
     return new Response(JSON.stringify({ error: 'messages required' }), {
@@ -57,32 +59,25 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       };
       try {
-        const zai = await ZAI.create();
-        send({ type: 'start', credits: consume.remaining });
+        const modelLabel = chatModel || 'grok';
+        send({ type: 'start', credits: consume.remaining, model: modelLabel });
 
-        // SDK stream:true returns raw bytes in this env, so use non-streaming
-        // then chunk the full response server-side for a real streaming UX.
-        const completion = await zai.chat.completions.create({
-          messages,
-          thinking: { type: 'disabled' },
-        });
-        fullText = completion?.choices?.[0]?.message?.content ?? '';
+        // Usa callLLM (Grok via OpenRouter, com fallback pra GLM)
+        const result = await callLLM(chatModel || 'grok', messages);
+        fullText = result.content;
 
         if (!fullText) {
           send({ type: 'error', error: 'Resposta vazia do modelo' });
         } else {
-          // stream word-by-word with tiny delay for UX
           const tokens = fullText.match(/\S+\s*/g) ?? [fullText];
           for (const tk of tokens) {
             send({ type: 'delta', text: tk });
-            // small delay to simulate token streaming
             await new Promise((r) => setTimeout(r, 18));
           }
         }
 
-        // persist assistant message
         await db.message.create({
-          data: { userId: user.id, role: 'assistant', content: fullText, model: 'glm-5.2' },
+          data: { userId: user.id, role: 'assistant', content: fullText, model: result.model },
         });
 
         send({ type: 'done', credits: consume.remaining - 1, usage: { text: fullText.length } });
