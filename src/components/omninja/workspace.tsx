@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { ModelSelector } from './model-selector';
 import { MessageList } from './messages';
 import { ChatInput } from './chat-input';
-import { ComputerPanel, ProgressWidget } from './computer-panel';
+import { ComputerPanel, ProgressWidget } from './computer-panel-v2';
 import { AdminSheet, DocsSheet, AccountSheet, StatusSheet, LoginSheet, ScheduledSheet, LibrarySheet, PluginsSheet } from './sheets';
 import { CommandPalette } from './command-palette';
 import {
