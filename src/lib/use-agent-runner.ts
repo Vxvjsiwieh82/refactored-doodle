@@ -130,7 +130,14 @@ export function useAgentRunner() {
           useOmni.getState().setScreenshot(screenshot);
         });
       } catch (err: any) {
-        finalSummary = `Erro na execução: ${err.message}`;
+        const errMsg = err.message.includes('network') || err.message.includes('Failed to fetch')
+          ? 'Erro de conexão com o modelo de IA. O servidor pode estar sobrecarregado. Tente novamente em alguns segundos.'
+          : err.message.includes('timeout')
+          ? 'O modelo demorou muito para responder (timeout). Tente uma tarefa mais simples.'
+          : err.message.includes('402')
+          ? 'Créditos insuficientes no OpenRouter. Usando modelo local (GLM).'
+          : `Erro: ${err.message}`;
+        finalSummary = errMsg;
       }
 
       // final assistant summary message

@@ -1,6 +1,5 @@
-// OmniNinja — Multi-model LLM client
-// Usa OpenRouter (Grok, Kimi) ou GLM (fallback nativo do Z.ai)
-// Claude/GPT/Gemini bloqueados por região (403) — Grok e Kimi funcionam.
+// OmniNinja — Multi-model LLM client v3
+// Correção: timeout + retry + SSE heartbeat + fallback automático
 
 import ZAI from 'z-ai-web-dev-sdk';
 
@@ -14,20 +13,11 @@ const OPENROUTER_MODELS: Record<string, { label: string; model: string; apiKeyEn
   gemini: { label: 'Gemini', model: 'google/gemini-3.6-flash', apiKeyEnv: 'OPENROUTER_GEMINI_API_KEY' },
 };
 
-// Prioridade: Grok (funciona + rápido) > Kimi (funciona + créditos) > GLM (sempre funciona no Z.ai)
 const FALLBACK_ORDER = ['grok', 'kimi', 'glm'];
-
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
-export interface LLMMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-export interface LLMResponse {
-  content: string;
-  model: string;
-}
+export interface LLMMessage { role: 'system' | 'user' | 'assistant'; content: string; }
+export interface LLMResponse { content: string; model: string; }
 
 export async function callLLM(
   modelId: string,
@@ -37,41 +27,63 @@ export async function callLLM(
   const cfg = OPENROUTER_MODELS[modelId];
   const apiKey = cfg ? process.env[cfg.apiKeyEnv] : null;
 
-  // Try the requested model first
+  // Try the requested model first (with retry)
   if (cfg && apiKey) {
     try {
-      return await callOpenRouter(cfg.model, apiKey, messages, options);
+      return await callOpenRouterWithRetry(cfg.model, apiKey, messages, options);
     } catch (err: any) {
-      // If it's a 403 (region blocked) or 402 (credits), try fallback
-      if (err.message.includes('403') || err.message.includes('402')) {
-        // Fall through to fallback logic
-      } else {
-        throw err;
+      // If 403 (region) or 402 (credits), skip to fallback
+      if (!err.message.includes('403') && !err.message.includes('402')) {
+        // For network errors, also try fallback
       }
     }
   }
 
-  // Fallback: try models in priority order
+  // Fallback chain: try each model in priority order
   for (const id of FALLBACK_ORDER) {
-    if (id === modelId) continue; // already tried
+    if (id === modelId) continue;
     if (id === 'glm') {
-      try {
-        return await callGLM(messages, options);
-      } catch { continue; }
+      try { return await callGLM(messages, options); } catch { continue; }
     }
     const c = OPENROUTER_MODELS[id];
     if (c) {
       const key = process.env[c.apiKeyEnv];
       if (key) {
-        try {
-          return await callOpenRouter(c.model, key, messages, options);
-        } catch { continue; }
+        try { return await callOpenRouterWithRetry(c.model, key, messages, options); } catch { continue; }
       }
     }
   }
 
   // Last resort: GLM SDK
   return callGLM(messages, options);
+}
+
+// NOVO: Retry com timeout e backoff exponencial
+async function callOpenRouterWithRetry(
+  model: string,
+  apiKey: string,
+  messages: LLMMessage[],
+  options?: { temperature?: number; maxTokens?: number },
+  retries = 2
+): Promise<LLMResponse> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await callOpenRouter(model, apiKey, messages, options);
+    } catch (err: any) {
+      const isLastAttempt = attempt === retries;
+      const isNetworkError = err.message.includes('network') || err.message.includes('Failed to fetch') || err.message.includes('timeout') || err.message.includes('aborted');
+      const is429 = err.message.includes('429');
+      
+      if (isLastAttempt || (!isNetworkError && !is429)) {
+        throw err;
+      }
+      
+      // Backoff exponencial: 1s, 2s, 4s
+      const delay = Math.pow(2, attempt) * 1000;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('Max retries exceeded');
 }
 
 async function callOpenRouter(
@@ -84,30 +96,54 @@ async function callOpenRouter(
     model,
     messages,
     temperature: options?.temperature ?? 0.7,
+    provider: { allow_fallbacks: true }, // Permite failover automático
   };
   if (options?.maxTokens) body.max_tokens = options.maxTokens;
 
-  const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://omnininja.space-z.ai',
-      'X-Title': 'OmniNinja',
-    },
-    body: JSON.stringify(body),
-  });
+  // Timeout de 60 segundos (antes era infinito → causava "network error")
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`OpenRouter ${model} HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  try {
+    const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://omnininja.space-z.ai',
+        'X-Title': 'OmniNinja',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText);
+      
+      // Se for 429 (rate limit), ler header Retry-After
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('retry-after');
+        const delay = retryAfter ? Number(retryAfter) * 1000 : 2000;
+        await new Promise(r => setTimeout(r, delay));
+        throw new Error(`OpenRouter 429: rate limited, retrying after ${delay}ms`);
+      }
+      
+      throw new Error(`OpenRouter ${model} HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const choice = data?.choices?.[0]?.message;
+    const content = choice?.content ?? choice?.reasoning ?? '';
+    return { content, model: data?.model ?? model };
+  } catch (err: any) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') {
+      throw new Error(`OpenRouter ${model} timeout: 60s sem resposta`);
+    }
+    throw err;
   }
-
-  const data = await res.json();
-  const choice = data?.choices?.[0]?.message;
-  // Some models (Kimi, Grok) return reasoning separately — use content, fallback to reasoning
-  const content = choice?.content ?? choice?.reasoning ?? '';
-  return { content, model: data?.model ?? model };
 }
 
 async function callGLM(

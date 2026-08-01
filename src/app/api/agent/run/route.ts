@@ -55,6 +55,14 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       };
 
+      // SSE HEARTBEAT: envia ping a cada 5s para manter conexão viva
+      // (previne "network error" do browser por timeout)
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+        } catch {}
+      }, 5000);
+
       // Collect events for DB persistence
       const events: { type: string; payload: string }[] = [];
       let finalSummary = '';
@@ -106,6 +114,7 @@ export async function POST(req: Request) {
           data: { status: 'failed', finishedAt: new Date() },
         }).catch(() => {});
       } finally {
+        clearInterval(heartbeat);
         controller.enqueue(encoder.encode('event: end\ndata: {}\n\n'));
         controller.close();
       }
