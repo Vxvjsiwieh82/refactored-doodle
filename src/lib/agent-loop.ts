@@ -4,8 +4,10 @@
 // This is the REAL Manus-style agent loop (analyze → select tool → execute → iterate).
 
 import ZAI from 'z-ai-web-dev-sdk';
+import { callLLM, getModelLabel } from './llm-client';
 import { browserTools, createPage, closeBrowser, type BrowserActionResult } from './browser-agent';
 import { shellExec, fileWrite, fileRead } from './shell-agent';
+import * as sandbox from './sandbox-client';
 import type { AgentEvent } from './orchestrator';
 
 export interface AgentLoopOptions {
@@ -68,11 +70,11 @@ function truncate(s: string, max: number): string {
 }
 
 export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
-  const { goal, taskId, onEvent } = opts;
-  const zai = await ZAI.create();
+  const { goal, taskId, model, onEvent } = opts;
 
   // Emit TASK_STARTED + PLAN_CREATED
   onEvent({ type: 'TASK_STARTED', taskId, goal, ts: Date.now() });
+  onEvent({ type: 'AGENT_THINKING', taskId, agent: 'Orchestrator', text: `Iniciando com modelo ${model}...`, ts: Date.now() });
   const planSteps = [
     { id: 's1', title: 'Analisar objetivo', agent: 'Chat' as const, instruction: goal },
     { id: 's2', title: 'Executar ações', agent: 'Code' as const, instruction: 'Usar ferramentas' },
@@ -94,15 +96,12 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
       stepNum = i + 1;
 
       // Ask LLM what to do next
-      onEvent({ type: 'AGENT_THINKING', taskId, agent: 'Orchestrator', text: `Decidindo ação ${stepNum}...`, ts: Date.now() });
+      onEvent({ type: 'AGENT_THINKING', taskId, agent: 'Orchestrator', text: `Decidindo ação ${stepNum} com ${model}...`, ts: Date.now() });
 
       let llmResponse = '';
       try {
-        const completion = await zai.chat.completions.create({
-          messages,
-          thinking: { type: 'disabled' },
-        } as any);
-        llmResponse = completion?.choices?.[0]?.message?.content ?? '';
+        const result = await callLLM(model, messages.map((m: any) => ({ role: m.role, content: m.content })), { temperature: 0.4 });
+        llmResponse = result.content;
       } catch (err: any) {
         onEvent({ type: 'TASK_FAILED', taskId, error: `LLM error: ${err.message}`, ts: Date.now() });
         return;
@@ -214,19 +213,38 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
             ts: Date.now(),
           });
         } else if (toolCall.tool === 'shell_exec') {
-          const result = await shellExec(taskId, toolCall.args.cmd);
+          // Usa o sandbox Ubuntu da EC2 se disponível, senão shell local
+          let result;
+          try {
+            if (sandbox.hasSandbox) {
+              result = await sandbox.sandboxShell(taskId, toolCall.args.cmd);
+            } else {
+              result = await shellExec(taskId, toolCall.args.cmd);
+            }
+          } catch (err: any) {
+            result = { cmd: toolCall.args.cmd, stdout: '', stderr: err.message, exitCode: 1 };
+          }
           onEvent({
             type: 'TERMINAL_OUTPUT',
             taskId,
             cmd: toolCall.args.cmd,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
+            stdout: result.stdout || '',
+            stderr: result.stderr || '',
+            exitCode: result.exitCode ?? 1,
             ts: Date.now(),
           });
-          observation = `Comando: ${toolCall.args.cmd}\nSaída: ${truncate(result.stdout || result.stderr, 2000)}\nExit code: ${result.exitCode}`;
+          observation = `Comando: ${toolCall.args.cmd}\nSaída: ${truncate(result.stdout || result.stderr || '', 2000)}\nExit code: ${result.exitCode}`;
         } else if (toolCall.tool === 'file_write') {
-          const result = fileWrite(taskId, toolCall.args.path, toolCall.args.content);
+          let result;
+          try {
+            if (sandbox.hasSandbox) {
+              result = await sandbox.sandboxFileWrite(taskId, toolCall.args.path, toolCall.args.content);
+            } else {
+              result = fileWrite(taskId, toolCall.args.path, toolCall.args.content);
+            }
+          } catch (err: any) {
+            result = { path: toolCall.args.path, bytes: 0 };
+          }
           onEvent({
             type: 'FILE_CHANGED',
             taskId,
@@ -236,7 +254,16 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
           });
           observation = `Arquivo criado: ${result.path} (${result.bytes} bytes)`;
         } else if (toolCall.tool === 'file_read') {
-          const content = fileRead(taskId, toolCall.args.path);
+          let content;
+          try {
+            if (sandbox.hasSandbox) {
+              content = await sandbox.sandboxFileRead(taskId, toolCall.args.path);
+            } else {
+              content = fileRead(taskId, toolCall.args.path);
+            }
+          } catch (err: any) {
+            content = `Error: ${err.message}`;
+          }
           observation = `Conteúdo de ${toolCall.args.path}: ${truncate(content, 2000)}`;
         } else {
           observation = `Ferramenta não reconhecida: ${toolCall.tool}`;
