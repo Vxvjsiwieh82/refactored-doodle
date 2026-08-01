@@ -104,7 +104,7 @@ export const useOmni = create<OmniState>((set) => ({
     })),
   clearMessages: () => set({ messages: [] }),
 
-  model: 'grok',
+  model: 'glm',
   setModel: (m) => set({ model: m }),
   mode: 'agent',
   setMode: (m) => set({ mode: m }),
