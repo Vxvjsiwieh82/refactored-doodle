@@ -50,81 +50,82 @@
   --radius-2xl: calc(var(--radius) + 8px);
 }
 
-/* OmniNinja — dark-first design system (Ninja AI style, Seção 10.2) */
+/* OmniNinja — Design System "Azul Elétrico" (baseado nos documentos OMMININJA) */
 :root {
   --radius: 0.75rem;
-  /* Ninja AI palette as the default (dark-first product) */
-  --background: #0d0d0f;
+  /* Azul Elétrico Soberano (manifesto dos documentos) */
+  --background: #050A15;
   --foreground: #f2f2f3;
-  --card: #17171a;
+  --card: #0D1220;
   --card-foreground: #f2f2f3;
-  --popover: #1f1f23;
+  --popover: #121A2B;
   --popover-foreground: #f2f2f3;
-  --primary: #38bdf8;
-  --primary-foreground: #06283a;
-  --secondary: #1f1f23;
+  --primary: #0066FF;
+  --primary-foreground: #ffffff;
+  --secondary: #1A2336;
   --secondary-foreground: #f2f2f3;
-  --muted: #17171a;
-  --muted-foreground: #9a9aa0;
-  --accent: #2a2a2f;
+  --muted: #0D1220;
+  --muted-foreground: #94A3B8;
+  --accent: #1A2336;
   --accent-foreground: #f2f2f3;
   --destructive: #ef4444;
-  --border: #2a2a2e;
-  --input: #2a2a2e;
-  --ring: #38bdf8;
-  --brand: #38bdf8;
-  --brand-foreground: #06283a;
-  --success: #22c55e;
-  --warning: #f59e0b;
+  --border: rgba(255,255,255,0.06);
+  --input: rgba(255,255,255,0.10);
+  --ring: #0066FF;
+  --brand: #0066FF;
+  --brand-foreground: #ffffff;
+  --brand-glow: #00D1FF;
+  --success: #10B981;
+  --warning: #F59E0B;
   --danger: #ef4444;
-  --chart-1: #38bdf8;
-  --chart-2: #22c55e;
-  --chart-3: #f59e0b;
+  --chart-1: #0066FF;
+  --chart-2: #00D1FF;
+  --chart-3: #10B981;
   --chart-4: #a855f7;
   --chart-5: #ef4444;
-  --sidebar: #0a0a0c;
+  --sidebar: #050A15;
   --sidebar-foreground: #f2f2f3;
-  --sidebar-primary: #38bdf8;
-  --sidebar-primary-foreground: #06283a;
-  --sidebar-accent: #1f1f23;
+  --sidebar-primary: #0066FF;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #0D1220;
   --sidebar-accent-foreground: #f2f2f3;
-  --sidebar-border: #1f1f23;
-  --sidebar-ring: #38bdf8;
+  --sidebar-border: rgba(255,255,255,0.06);
+  --sidebar-ring: #0066FF;
 
-  /* semantic surface tokens (Ninja AI) */
-  --bg-primary: #0d0d0f;
-  --bg-secondary: #17171a;
-  --bg-elevated: #1f1f23;
-  --bg-hover: #2a2a2f;
-  --border-subtle: #2a2a2e;
+  /* semantic surface tokens */
+  --bg-primary: #050A15;
+  --bg-secondary: #0D1220;
+  --bg-elevated: #121A2B;
+  --bg-hover: #1A2336;
+  --border-subtle: rgba(255,255,255,0.06);
   --text-primary: #f2f2f3;
-  --text-secondary: #9a9aa0;
-  --text-muted: #6b6b70;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
 }
 
 .dark {
-  --background: #0d0d0f;
+  --background: #050A15;
   --foreground: #f2f2f3;
-  --card: #17171a;
+  --card: #0D1220;
   --card-foreground: #f2f2f3;
-  --popover: #1f1f23;
+  --popover: #121A2B;
   --popover-foreground: #f2f2f3;
-  --primary: #38bdf8;
-  --primary-foreground: #06283a;
-  --secondary: #1f1f23;
+  --primary: #0066FF;
+  --primary-foreground: #ffffff;
+  --secondary: #1A2336;
   --secondary-foreground: #f2f2f3;
-  --muted: #17171a;
-  --muted-foreground: #9a9aa0;
-  --accent: #2a2a2f;
+  --muted: #0D1220;
+  --muted-foreground: #94A3B8;
+  --accent: #1A2336;
   --accent-foreground: #f2f2f3;
   --destructive: #ef4444;
-  --border: #2a2a2e;
-  --input: #2a2a2e;
-  --ring: #38bdf8;
-  --brand: #38bdf8;
-  --brand-foreground: #06283a;
-  --success: #22c55e;
-  --warning: #f59e0b;
+  --border: rgba(255,255,255,0.06);
+  --input: rgba(255,255,255,0.10);
+  --ring: #0066FF;
+  --brand: #0066FF;
+  --brand-foreground: #ffffff;
+  --success: #10B981;
+  --warning: #F59E0B;
   --danger: #ef4444;
 }
 
@@ -410,3 +411,60 @@
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ===== OMMININJA MANIFESTO ANIMATIONS ===== */
+
+/* Ninja Glow (do manifesto) */
+@keyframes ninja-glow {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.8; filter: brightness(1.5); }
+}
+.ninja-glow { animation: ninja-glow 2s ease-in-out infinite; }
+
+/* Orbital thinking (Three.js-like, mas em CSS) */
+@keyframes orbital {
+  from { transform: rotate(0deg) translateX(20px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(20px) rotate(-360deg); }
+}
+.orbital-dot {
+  animation: orbital 3s linear infinite;
+}
+
+/* Glitch controlado (identidade Ninja) */
+@keyframes glitch {
+  0%, 100% { transform: translate(0); filter: hue-rotate(0deg); }
+  20% { transform: translate(-2px, 2px); filter: hue-rotate(90deg); }
+  40% { transform: translate(-2px, -2px); filter: hue-rotate(180deg); }
+  60% { transform: translate(2px, 2px); filter: hue-rotate(270deg); }
+  80% { transform: translate(2px, -2px); filter: hue-rotate(0deg); }
+}
+.glitch-effect { animation: glitch 0.3s ease-in-out; }
+
+/* Cyan glow pulse (feedback de processamento) */
+@keyframes cyan-pulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(0,209,255,0.3); }
+  50% { box-shadow: 0 0 25px rgba(0,209,255,0.6), 0 0 50px rgba(0,102,255,0.3); }
+}
+.cyan-pulse { animation: cyan-pulse 2s ease-in-out infinite; }
+
+/* Glassmorphism premium (do manifesto: backdrop-blur 20-40px) */
+.glass-premium {
+  background: rgba(13,18,32,0.55);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 0.5px solid rgba(255,255,255,0.08);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* Electric blue gradient text */
+.text-electric {
+  background: linear-gradient(135deg, #0066FF, #00D1FF);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Deep space background (do manifesto) */
+.bg-deep-space {
+  background: radial-gradient(ellipse at top, #0D1220 0%, #050A15 60%, #020408 100%);
+}
