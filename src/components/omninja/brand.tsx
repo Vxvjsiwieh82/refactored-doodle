@@ -12,19 +12,50 @@ export function OmniNinjaLogo({ className, size = 28 }: { className?: string; si
     >
       <defs>
         <linearGradient id="omni-grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#38bdf8" />
-          <stop offset="0.55" stopColor="#818cf8" />
-          <stop offset="1" stopColor="#a855f7" />
+          <stop stopColor="#0066FF" />
+          <stop offset="0.5" stopColor="#00D1FF" />
+          <stop offset="1" stopColor="#0066FF" />
         </linearGradient>
+        <filter id="omni-glow">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
-      <rect x="2" y="2" width="44" height="44" rx="12" fill="#0d0d0f" stroke="url(#omni-grad)" strokeWidth="1.5" />
-      <circle cx="24" cy="24" r="9" stroke="url(#omni-grad)" strokeWidth="2.4" />
+      {/* Fundo: quadrado arredondado deep space */}
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="#050A15" stroke="url(#omni-grad)" strokeWidth="1.5" />
+      {/* Logo: ninja estilizado em forma geométrica (inspirado Ninja AI) */}
+      {/* Cabeça ninja com bandana */}
       <path
-        d="M24 12.5l1.6 4.2 4.4-1.2-1.2 4.4 4.2 1.6-4.2 1.6 1.2 4.4-4.4-1.2-1.6 4.2-1.6-4.2-4.4 1.2 1.2-4.4-4.2-1.6 4.2-1.6-1.2-4.4 4.4 1.2 1.6-4.2z"
+        d="M16 14 L32 14 L34 18 L34 28 L30 34 L24 36 L18 34 L14 28 L14 18 Z"
         fill="url(#omni-grad)"
-        opacity="0.9"
+        opacity="0.15"
       />
-      <circle cx="24" cy="24" r="2.4" fill="#0d0d0f" />
+      {/* Bandana (faixa horizontal) */}
+      <rect x="14" y="19" width="20" height="4" rx="1" fill="url(#omni-grad)" />
+      {/* Olhos (cortes na bandana) */}
+      <rect x="18" y="20" width="3" height="2" rx="0.5" fill="#050A15" />
+      <rect x="27" y="20" width="3" height="2" rx="0.5" fill="#050A15" />
+      {/* Gordas da bandana */}
+      <path
+        d="M34 19 L38 17 L36 21 L38 23 L34 22"
+        stroke="url(#omni-grad)"
+        strokeWidth="1.5"
+        fill="none"
+        strokeLinecap="round"
+      />
+      {/* Corpo ninja */}
+      <path
+        d="M20 24 L28 24 L28 28 L26 30 L22 30 L20 28 Z"
+        fill="url(#omni-grad)"
+        opacity="0.3"
+      />
+      {/* Espada diagonal (elemento ninja) */}
+      <line x1="14" y1="34" x2="34" y2="14" stroke="url(#omni-grad)" strokeWidth="1" opacity="0.2" />
+      {/* Glow ao redor */}
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="none" stroke="url(#omni-grad)" strokeWidth="0.5" opacity="0.3" filter="url(#omni-glow)" />
     </svg>
   );
 }
@@ -34,7 +65,7 @@ export function Wordmark({ className }: { className?: string }) {
     <span className={cn('flex items-center gap-2 font-semibold tracking-tight', className)}>
       <OmniNinjaLogo size={26} />
       <span className="text-[15px]">
-        Omni<span className="text-gradient-brand">Ninja</span>
+        Ommi<span className="text-electric">Ninja</span>
       </span>
     </span>
   );
