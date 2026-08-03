@@ -199,10 +199,6 @@ function ThinkingDots() {
 }
 
 function EmptyChat() {
-  const setModel = useOmni((s) => s.setModel);
-  const setMode = useOmni((s) => s.setMode);
-  const mode = useOmni((s) => s.mode);
-
   const prompts = [
     { icon: '🌐', title: 'Criar site', text: 'Crie uma landing page moderna para um SaaS de gestão de tarefas com hero, features e preços.' },
     { icon: '📊', title: 'Pesquisar mercado', text: 'Pesquise o mercado de agentes de IA autônomos em 2026 e gere um relatório comparativo.' },
@@ -217,31 +213,14 @@ function EmptyChat() {
         O que posso fazer por você?
       </h1>
       <p className="mt-2 text-center text-sm text-muted-foreground">
-        Digite uma tarefa ou escolha um atalho. O Computador abre quando preciso.
+        Digite uma pergunta ou tarefa. O Computer abre automaticamente quando preciso.
       </p>
-
-      {/* mode chips */}
-      <div className="mt-6 flex items-center gap-1.5 rounded-full border border-border bg-card p-1">
-        {(['chat', 'agent', 'agent_max'] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={cn(
-              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              mode === m ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {m === 'agent_max' ? 'Agent MAX' : m.charAt(0).toUpperCase() + m.slice(1)}
-          </button>
-        ))}
-      </div>
 
       <div className="mt-8 grid w-full gap-3 sm:grid-cols-2">
         {prompts.map((p) => (
           <button
             key={p.title}
             onClick={() => useOmni.setState((s) => {
-              // trigger send via a custom event the input listens to
               window.dispatchEvent(new CustomEvent('omninja:prompt', { detail: p.text }));
               return s;
             })}

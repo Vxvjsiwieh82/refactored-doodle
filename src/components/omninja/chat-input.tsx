@@ -72,24 +72,17 @@ export function ChatInput() {
   return (
     <div className="border-t border-border bg-background/80 backdrop-blur-xl">
       <div className="mx-auto max-w-3xl px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-        {/* mode + quick toggles row */}
-        <div className="mb-2 flex items-center gap-1.5">
-          <ModePill mode="chat" current={mode} setMode={setMode} />
-          <ModePill mode="agent" current={mode} setMode={setMode} />
-          <ModePill mode="agent_max" current={mode} setMode={setMode} />
-          <span className="ml-auto flex items-center gap-2">
-            <Badge variant="outline" className="gap-1 border-border/60 text-[10px] text-muted-foreground">
-              <Sparkles className="h-2.5 w-2.5" /> {mode === 'chat' ? 'Resposta direta' : mode === 'agent' ? '1 sub-agente' : 'Paralelo'}
-            </Badge>
+        {/* Sem modos — igual Manus, um chat só. O agente decide automaticamente. */}
+        <div className="mb-2 flex items-center gap-2">
+          <ModelSelector />
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            OmmiNinja decide automaticamente quando usar o Computer
           </span>
         </div>
 
         <div className="flex items-end gap-2 rounded-2xl border border-border bg-card p-2 transition-colors focus-within:border-brand/50">
           {/* attach menu */}
           <AttachMenu />
-
-          {/* model selector */}
-          <ModelSelector />
 
           {/* textarea */}
           <textarea
