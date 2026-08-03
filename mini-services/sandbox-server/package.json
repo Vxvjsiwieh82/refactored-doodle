@@ -1,0 +1,13 @@
+{
+  "name": "omninja-sandbox-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "npx tsx index.ts"
+  },
+  "dependencies": {
+    "playwright-core": "^1.62.0"
+  }
+}
